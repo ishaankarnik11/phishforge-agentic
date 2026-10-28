@@ -1,6 +1,6 @@
 # PhishForge
 
-**An AI studio that turns a scenario brief into a ready-to-send phishing-simulation email, for authorized security-awareness audits. It was built almost entirely by a team of AI agents, run by a Product Owner who never wrote the feature code.**
+**An AI studio that turns a scenario brief into a ready-to-send phishing-simulation email, complete with AI-generated imagery, for authorized security-awareness audits. It was built almost entirely by a team of AI agents, run by a Product Owner who never wrote the feature code.**
 
 > **Built by Ishaan Karnik, an AI-enabled Product Owner.**
 > This repo has two things to look at: the **product** (a working, deployed, multi-stage LLM pipeline) and the **process** (an agentic delivery system with specialist agents, quality gates and a paper trail). The process is the more interesting half.
@@ -54,7 +54,7 @@ The full contract the agents run under is in [`CLAUDE.md`](CLAUDE.md), [`.claude
 | | |
 |---|---|
 | Commits | ~300 |
-| Stories delivered | 46 (POC, 9 sprints) + 13 (pivot, 3 sprints) + a change-request sprint, all through the review gate |
+| Stories delivered | 46 (mailer, 9 sprints) + ~17 (AI asset library) + 13 (phishing-sim pivot, 3 sprints) + a change-request sprint, all through the review gate |
 | Review verdicts on file | 60+ `APPROVE`, plus several `REQUEST CHANGES` rounds |
 | Acceptance-criteria audit | 150 ✅ / 6 ⚠️ / 0 ❌ across 156 ACs ([`PRD_AUDIT.md`](docs/PRD_AUDIT.md)) |
 | Backend tests | 772 passing in the latest recorded full run ([BUG-7 review](reviews/BUG-7-review.md)) |
@@ -83,10 +83,24 @@ These are from the artifacts in `reviews/`, not invented examples:
 - **Pretext brief form** with impersonation presets, optional **sample-email upload** (the model uses real lures as visual references), and a visible authorization boundary.
 - **Multi-stage LLM pipeline** (generate → validate/retry → refine → export) that turns the brief into **MJML**, which compiles to email-safe HTML. Claude Sonnet generates and Claude Haiku refines. An MJML validator and retry loop guard the output, so the model never emits raw HTML.
 - **Two-pane editor** (GrapesJS plus live preview) with chat-based refinement, direct text edits, version history and export.
-- **AI asset library** (OpenAI GPT Image) for generating, masking and reusing lure imagery.
+- **AI image studio and asset library** (OpenAI GPT Image 2), covered in the next section. This is the largest capability added on top of the base mailer.
 - **Observability**: per-call token and cost tracking, with the cache savings shown.
 
 **Scope boundary (by design).** PhishForge generates *templates only*. It does not send email, manage target lists, host landing pages or track clicks and credentials. See [Responsible use](#responsible-use).
+
+### Image generation: an asset library built beyond the base mailer
+
+The original mailer could only *upload* images. I extended it with a full AI image workflow, specified in [`docs/PRD-asset-library.md`](docs/PRD-asset-library.md), prompt-engineered in [`docs/GPT_IMAGE_PROMPT_GUIDE.md`](docs/GPT_IMAGE_PROMPT_GUIDE.md), and delivered as ~17 reviewed stories (A1.x to A5.x):
+
+- **Generate** from a text prompt with style presets, banner dimensions and a brand-neutral base prompt, via the GPT Image 2 API.
+- **Iterate**: regenerate (new seed), **refine** with a new instruction, or edit the original prompt and re-run. Every change is kept as a **version**, with a timeline and "set as primary".
+- **Use as reference**: feed an existing image back in (the `images.edit` path) to create a new asset inspired by it.
+- **Mask editor**: paint a region and regenerate only that part (inpainting).
+- **Library**: shared, searchable, tagged assets with bulk tagging, soft-delete and a detail page.
+- **Wired into the email workflow**: an asset picker in the brief form, "swap from library" inside the editor, inline generation, and **chat-based asset references** ("use the hero image from my library").
+- **Cost tracking** per image alongside per-call LLM cost.
+
+Design choice worth noting: this is not a bolt-on image generator. The key product insight (PRD §1) is that image-heavy emails need the visual to *be* the content, so generation is integrated into the same flow as the email pipeline.
 
 ### Architecture
 
@@ -153,7 +167,12 @@ PhishForge is for **authorized, consented** security-awareness testing (the same
 
 ## Provenance
 
-PhishForge began as a marketing-email studio POC and was **pivoted** to the phishing-simulation domain. The pivot itself (PRD, change requests, de-branding stories) is documented in the sprint board. For this public release, the original client's name, logos, domains and infrastructure details were replaced with a fictional brand ("Acme Bank"), and legacy brand screenshots were removed. The `docs/legacy-*` files describe the pre-pivot marketing use case.
+PhishForge is a **fork of an AI email-studio ("mailer") POC** that generated marketing emails from a brief. I forked it for a different purpose, anti-phishing audit simulations, and extended it substantially:
+
+1. **Pivot**: new PRD, a pretext-based brief form, impersonation presets, rewritten generation and refinement prompts, and an authorized-simulation framing (Sprints AP-0 to AP-3, plus [CR-001](docs/CR-001-brief-form-rationalization.md)).
+2. **AI image studio**: the asset library described above, which the base mailer did not have.
+
+The `docs/legacy-*` files describe the original marketing use case. For this public release, the demo brand used throughout the original POC (a real bank's name, logos and domains) was replaced with a fictional "Acme Bank", legacy screenshots showing it were removed, and internal infrastructure details were redacted.
 
 ## License
 

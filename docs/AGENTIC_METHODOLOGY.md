@@ -71,7 +71,7 @@ The Product Owner did not write feature code. The work was:
 
 1. **Frame the problem.** The pivot PRD ([`PRD-anti-phishing.md`](PRD-anti-phishing.md)) has a reused / changed / repurposed / removed table that scopes the whole pivot on one page.
 2. **Set the boundary.** The authorization boundary (*template generation only, no sending, no targeting, no credential capture*) was a product decision that shaped scope, prompts and UI copy. See [`SECURITY.md`](../SECURITY.md).
-3. **Run UAT and turn findings into change requests.** After the pivot shipped, a walk-through found that the inherited marketing form still injected marketing fields into the prompt. That became [CR-001](CR-001-brief-form-rationalization.md): evidence with file and line references, a proposal, a PO redline, then a sprint. Plan, redline, implement. Don't one-shot.
+3. **Run UAT and turn findings into change requests.** After the pivot shipped, a walk-through found that the inherited mailer form still injected marketing fields into the prompt. That became [CR-001](CR-001-brief-form-rationalization.md): evidence with file and line references, a proposal, a PO redline, then a sprint. Plan, redline, implement. Don't one-shot.
 4. **Hold the merge gate.** Approve, or send it back.
 5. **Record decisions.** [`ADR.md`](ADR.md) holds 31 of them, so the reasoning outlives the chat session.
 
