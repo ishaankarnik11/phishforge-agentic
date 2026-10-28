@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg
+*.db
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.pnpm-store/
+npm-debug.log*
+# package-lock.json IS tracked (pins the MJML toolchain) — do not ignore it.
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+ssh_keys/
+
+# Local runtime artifacts
+.playwright-mcp/
+backend/uploads/
+backend/generated_images/
+
+# Tooling / local-only
+graphify-out/
+.claude/settings.local.json
+.ssh/
+*.pem
+*.key
+id_rsa*
+vm_deploy*
+coverage.json

@@ -1,0 +1,156 @@
+# Acme Emailer — production docker compose.
+#
+# Run from this folder:
+#     cp .env.example .env && nano .env
+#     docker compose up --build -d
+#
+# Topology (matches deploy/DEPLOYMENT.md):
+#   - db        : MySQL 8.0, internal-only on acme_net (no host port).
+#   - backend   : FastAPI + Node 22 + pinned mjml CLI. Bound to
+#                 127.0.0.1:8001 — NPM forwards in via Wireguard.
+#   - frontend  : nginx:alpine serving the static SPA bundle. Bound to
+#                 127.0.0.1:8182 — same NPM-forwarded posture.
+#
+# `name:` is set explicitly so this stack does not collide with the
+# token-flow stack already running on the same NAS — `docker compose ls`
+# will read cleanly and `acme_*` volumes/containers stay namespaced.
+
+name: acme-mailer
+
+services:
+
+  # ─── Database ──────────────────────────────────────────────────────
+  # No `ports:` — the DB is reachable only by `backend` over acme_net.
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - phishforge_mysql_data:/var/lib/mysql
+    networks: [acme_net]
+    # mysqladmin ping with the app credentials — proves the user can
+    # actually authenticate, not just that mysqld is listening.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Cap log volume so a chatty container can't fill the NAS disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Backend (FastAPI + Node + mjml) ───────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Bind to all interfaces (mirrors the TMS deploy pattern). NPM on
+    # DigitalOcean reaches the NAS over Wireguard (private peer IP),
+    # so loopback-only would not work. The home LAN gets unencrypted
+    # access to this port too — acceptable for the POC; tighten with a
+    # specific bind IP (e.g. ``"192.0.2.10:8001:8000"``) if needed.
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - acme_uploads:/app/uploads
+    networks: [acme_net]
+    environment:
+      # --- DB ----------------------------------------------------------
+      # Backend assembles its own connection string. The password is
+      # injected from .env so it never appears in this file or in
+      # `docker inspect` output as a literal.
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+
+      # --- Auth / API keys --------------------------------------------
+      SECRET_KEY: ${SECRET_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
+
+      # --- Public-facing URLs (baked into share links + exported HTML)
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+
+      # --- CORS — comma-separated list, parsed by Settings -----------
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+      # --- Refiner model override (haiku|sonnet) ---------------------
+      REFINER_MODEL: ${REFINER_MODEL:-haiku}
+
+      # --- Optional observability ------------------------------------
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-acme-emailer-prod}
+
+      # --- Misc -------------------------------------------------------
+      TZ: ${TZ:-Asia/Kolkata}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Frontend (static SPA via nginx:alpine) ────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # Public backend URL is baked into the SPA bundle at build time
+        # (TMS pattern). The browser hits the backend directly via this
+        # absolute URL; CORS is enforced by ``ALLOWED_ORIGINS`` on the
+        # backend container.
+        VITE_API_URL: ${PUBLIC_BACKEND_URL}
+    restart: unless-stopped
+    # See backend ``ports:`` comment for the all-interfaces rationale.
+    ports:
+      - "8182:80"
+    networks: [acme_net]
+    # Frontend serves only the static bundle at runtime — no env vars,
+    # no /api proxy. All API routing happens in the browser using the
+    # absolute URL baked above.
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1/healthz | grep -q "^ok" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ─── Named volumes ──────────────────────────────────────────────────
+# Default driver (local). Backed up via the script in deploy/scripts/.
+volumes:
+  phishforge_mysql_data:
+  acme_uploads:
+
+# ─── Internal network ───────────────────────────────────────────────
+networks:
+  acme_net:
+    driver: bridge

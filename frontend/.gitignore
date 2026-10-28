@@ -1,0 +1,5 @@
+# Playwright e2e (STORY-7.10)
+test-results/
+playwright-report/
+.last-run.json
+playwright/.cache/

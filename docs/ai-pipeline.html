@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acme Emailer Studio — AI Pipeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e8e8e8;
+    min-height: 100vh;
+    padding: 80px 120px;
+  }
+
+  .page {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: #4a6cf7;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+
+  h1 {
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #ffffff;
+    letter-spacing: -1px;
+    margin-bottom: 16px;
+  }
+
+  .lede {
+    font-size: 22px;
+    color: #c0c0c0;
+    font-weight: 300;
+    line-height: 1.6;
+    max-width: 900px;
+  }
+
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: #4a6cf7;
+    margin: 48px 0 40px;
+    border-radius: 2px;
+  }
+
+  h2 {
+    font-size: 30px;
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+    margin-bottom: 12px;
+  }
+
+  h2 + .sublede {
+    font-size: 17px;
+    color: #888;
+    font-weight: 300;
+    margin-bottom: 36px;
+  }
+
+  /* Main flow */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(11, 1fr);
+    align-items: stretch;
+    gap: 0;
+    margin: 24px 0 16px;
+  }
+
+  .stage {
+    grid-column: span 1;
+    background: rgba(74, 108, 247, 0.1);
+    border: 1px solid rgba(74, 108, 247, 0.3);
+    border-radius: 12px;
+    padding: 24px 16px;
+    text-align: center;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 10px;
+    grid-column: span 2;
+  }
+
+  .stage .num {
+    font-size: 11px;
+    color: #4a6cf7;
+    font-weight: 600;
+    letter-spacing: 2px;
+  }
+
+  .stage .name {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .stage .who {
+    font-size: 12px;
+    color: #888;
+    font-weight: 400;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .stage .desc {
+    font-size: 13px;
+    color: #aaa;
+    font-weight: 300;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  .stage.gen { background: rgba(74, 108, 247, 0.16); border-color: rgba(74, 108, 247, 0.45); }
+  .stage.refine { background: rgba(74, 108, 247, 0.16); border-color: rgba(74, 108, 247, 0.45); }
+  .stage.val { background: rgba(220, 100, 100, 0.10); border-color: rgba(220, 100, 100, 0.30); }
+  .stage.val .num { color: #e07070; }
+
+  .arrow {
+    grid-column: span 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4a6cf7;
+    font-size: 22px;
+    font-weight: 300;
+  }
+
+  /* Loop label under pipeline */
+  .loop-row {
+    display: grid;
+    grid-template-columns: repeat(11, 1fr);
+    margin-top: 12px;
+    margin-bottom: 8px;
+    color: #6f6f8f;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .loop-row .span-gen {
+    grid-column: 1 / span 5;
+    text-align: center;
+    color: #4a6cf7;
+  }
+
+  .loop-row .span-refine {
+    grid-column: 7 / span 3;
+    text-align: center;
+    color: #4a6cf7;
+  }
+
+  .loop-row .span-export {
+    grid-column: 11 / span 1;
+    text-align: center;
+    color: #888;
+  }
+
+  /* Section grids */
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-top: 8px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 28px;
+  }
+
+  .card .tag {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #4a6cf7;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  .card h3 {
+    font-size: 19px;
+    color: #ffffff;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .card p {
+    font-size: 15px;
+    color: #aaa;
+    line-height: 1.65;
+    font-weight: 300;
+  }
+
+  .card p + p {
+    margin-top: 10px;
+  }
+
+  .card .accent {
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  .card .highlight {
+    color: #4a6cf7;
+    font-weight: 500;
+  }
+
+  /* Stat row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+    margin-top: 8px;
+  }
+
+  .stat {
+    border-left: 2px solid #4a6cf7;
+    padding: 4px 0 4px 20px;
+  }
+
+  .stat .num {
+    font-size: 40px;
+    font-weight: 700;
+    color: #4a6cf7;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+
+  .stat .label-text {
+    font-size: 14px;
+    color: #aaa;
+    font-weight: 400;
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+
+  /* Callout */
+  .callout {
+    background: rgba(74, 108, 247, 0.08);
+    border-left: 3px solid #4a6cf7;
+    padding: 22px 28px;
+    margin-top: 28px;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .callout p {
+    font-size: 17px;
+    color: #c8c8c8;
+    font-style: italic;
+    line-height: 1.55;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    color: #555;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    body { padding: 48px 32px; }
+    h1 { font-size: 42px; }
+    .grid-3 { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .pipeline { grid-template-columns: 1fr; gap: 12px; }
+    .stage { grid-column: span 1 !important; }
+    .arrow { transform: rotate(90deg); padding: 4px 0; grid-column: span 1; }
+    .loop-row { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="label">Acme Emailer Studio &middot; AI Pipeline</div>
+  <h1>From Brief to Brand-Safe Email</h1>
+  <p class="lede">
+    Two Claude models. One strict MJML validator. Cached system prompts. The pipeline
+    turns a plain-English marketing brief into a cross-client-safe HTML email in
+    under two minutes &mdash; and never persists a broken template.
+  </p>
+
+  <div class="divider"></div>
+
+  <!-- Main pipeline flow -->
+  <h2>The Flow</h2>
+  <p class="sublede">Six stages. Two models. One bidirectional validator loop.</p>
+
+  <div class="pipeline">
+    <div class="stage">
+      <div class="num">01</div>
+      <div class="name">Brief</div>
+      <div class="who">Marketer input</div>
+      <div class="desc">Category, audience, goal, body, brand kit</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="stage gen">
+      <div class="num">02</div>
+      <div class="name">Generate</div>
+      <div class="who">Claude Sonnet</div>
+      <div class="desc">Brand-aware MJML draft, prompt cached</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="stage val">
+      <div class="num">03</div>
+      <div class="name">Validate</div>
+      <div class="who">MJML strict</div>
+      <div class="desc">Auto-repair + retry on failure</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="stage">
+      <div class="num">04</div>
+      <div class="name">Edit</div>
+      <div class="who">Two-pane canvas</div>
+      <div class="desc">Visual editor + live preview</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="stage refine">
+      <div class="num">05</div>
+      <div class="name">Refine</div>
+      <div class="who">Claude Haiku chat</div>
+      <div class="desc">"Make CTA red." "Shorter subject."</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="stage">
+      <div class="num">06</div>
+      <div class="name">Export</div>
+      <div class="who">Email-safe HTML</div>
+      <div class="desc">Gmail · Outlook · Apple · mobile</div>
+    </div>
+  </div>
+
+  <div class="loop-row">
+    <div class="span-gen">&larr; first-pass: full price &middot; subsequent: cached &rarr;</div>
+    <div class="span-refine">&larr; sub-second loop &rarr;</div>
+    <div class="span-export"></div>
+  </div>
+
+  <div class="callout">
+    <p>
+      Sonnet writes the first draft. Haiku handles every tweak after that &mdash;
+      ~20&times; cheaper, sub-second responses. The validator sits between the LLM
+      and storage so a hallucinated tag never lands in a saved version.
+    </p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Stage details -->
+  <h2>What Each Stage Actually Does</h2>
+  <p class="sublede">The engineering decisions that make the pipeline reliable, fast, and cheap.</p>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="tag">Stage 02 &middot; Generation</div>
+      <h3>Sonnet, brand-locked</h3>
+      <p>
+        The system prompt enumerates every <span class="accent">void MJML tag</span>,
+        gives correct-vs-wrong examples, and injects the selected
+        <span class="accent">brand kit</span> (colors, fonts, tone descriptors,
+        disclaimer) ahead of the brief.
+      </p>
+      <p>
+        Brand identity is not a guideline &mdash;
+        <span class="highlight">it is an input to every call</span>. The model
+        cannot generate off-brand because it never sees a brand-free prompt.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="tag">Stage 03 &middot; Validation</div>
+      <h3>Strict MJML or retry</h3>
+      <p>
+        The backend shells out to <span class="accent">mjml --config.validationLevel=strict</span>
+        and parses errors. Common defects (orphan close-tags, void-tag wrappers)
+        are <span class="accent">auto-repaired</span> before raising.
+      </p>
+      <p>
+        Hard failures trigger a <span class="highlight">retry with diagnostics</span>:
+        the original prompt is reissued with the validator's error report appended.
+        Bad output never reaches the canvas.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="tag">Stage 05 &middot; Refinement</div>
+      <h3>Haiku, surgical edits</h3>
+      <p>
+        Refinement is a <span class="accent">conversation, not a regeneration</span>.
+        The current MJML and the chat history are sent with each turn; Haiku
+        returns the edited tree.
+      </p>
+      <p>
+        Median <span class="highlight">2 turns to ship-ready</span>. Each turn is
+        sub-second, validated, and saved as a new version &mdash; nothing is lost.
+      </p>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Engineering wins -->
+  <h2>Why It Stays Cheap and Reliable</h2>
+  <p class="sublede">Three architectural decisions that keep the pipeline production-grade.</p>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="tag">Cost</div>
+      <h3>Prompt caching by default</h3>
+      <p>
+        Brand kit + MJML rules + system prompt are wrapped in a
+        <span class="accent">cache_control</span> block on every call. The first
+        request pays full price; every subsequent call in the same session reads
+        from cache.
+      </p>
+      <p>
+        Result: <span class="highlight">~80% cache hit rate</span> end-to-end.
+        Per-emailer LLM cost stays in the cents, not the dollars.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="tag">Reliability</div>
+      <h3>Validator-driven retry</h3>
+      <p>
+        The MJML validator is the contract between LLM output and storage.
+        <span class="accent">No version is persisted unless validation passes.</span>
+      </p>
+      <p>
+        On the rare hard failure, the retry attaches the structured error list to
+        the next prompt. The model sees exactly what it got wrong &mdash;
+        <span class="highlight">success rate climbs to ~99%</span> within one retry.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="tag">Speed</div>
+      <h3>Two-model strategy</h3>
+      <p>
+        <span class="accent">Sonnet</span> for the first draft &mdash; deeper reasoning,
+        better adherence to brand voice, takes the latency hit once.
+      </p>
+      <p>
+        <span class="accent">Haiku</span> for every edit after &mdash;
+        <span class="highlight">~20&times; cheaper</span>, sub-second turnaround,
+        ideal for "tighten the subject line" loops.
+      </p>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Stats -->
+  <h2>Numbers from the Audit</h2>
+  <p class="sublede">Verified during the STORY-7.9 acceptance audit, not aspirational.</p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="num">65&ndash;105s</div>
+      <div class="label-text">Brief &rarr; exportable HTML, warm cache</div>
+    </div>
+    <div class="stat">
+      <div class="num">2</div>
+      <div class="label-text">Median refinement turns to ship-ready (target &le;5)</div>
+    </div>
+    <div class="stat">
+      <div class="num">4 / 4</div>
+      <div class="label-text">Cross-client clean &mdash; Gmail, Outlook, Apple, mobile</div>
+    </div>
+    <div class="stat">
+      <div class="num">~80%</div>
+      <div class="label-text">Prompt cache hit rate after first call</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Acme Emailer Studio &middot; AI pipeline overview &middot; April 2026
+  </div>
+
+</div>
+</body>
+</html>

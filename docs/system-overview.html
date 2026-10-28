@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acme Emailer Studio — System Overview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e8e8e8;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .slide {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    height: 100vh;
+    width: 100vw;
+    padding: 80px 120px;
+    position: absolute;
+    top: 0; left: 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .slide.active {
+    display: flex;
+    opacity: 1;
+  }
+
+  /* Slide counter */
+  .slide-counter {
+    position: fixed;
+    bottom: 30px;
+    right: 40px;
+    font-size: 14px;
+    color: #555;
+    font-weight: 300;
+    z-index: 100;
+    letter-spacing: 2px;
+  }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 100;
+  }
+
+  .nav button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #aaa;
+    padding: 10px 28px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .nav button:hover {
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    border-color: rgba(255,255,255,0.3);
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: #4a6cf7;
+    transition: width 0.4s ease;
+    z-index: 200;
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 24px;
+    color: #ffffff;
+    letter-spacing: -1px;
+  }
+
+  h2 {
+    font-size: 40px;
+    font-weight: 600;
+    line-height: 1.25;
+    margin-bottom: 20px;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+  }
+
+  h3 {
+    font-size: 22px;
+    font-weight: 500;
+    color: #4a6cf7;
+    margin-bottom: 32px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  p, li {
+    font-size: 22px;
+    line-height: 1.7;
+    color: #c0c0c0;
+    font-weight: 300;
+  }
+
+  .subtitle {
+    font-size: 24px;
+    color: #888;
+    font-weight: 300;
+    margin-bottom: 16px;
+  }
+
+  .label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: #4a6cf7;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  ul li {
+    padding: 10px 0;
+    padding-left: 28px;
+    position: relative;
+  }
+
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20px;
+    width: 8px;
+    height: 8px;
+    background: #4a6cf7;
+    border-radius: 50%;
+  }
+
+  .highlight {
+    color: #4a6cf7;
+    font-weight: 500;
+  }
+
+  .accent {
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  /* Divider line */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: #4a6cf7;
+    margin: 24px 0;
+    border-radius: 2px;
+  }
+
+  /* Grid layouts */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 32px;
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 32px;
+  }
+
+  .card h4 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+
+  .card p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #999;
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 40px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .flow-item {
+    background: rgba(74, 108, 247, 0.1);
+    border: 1px solid rgba(74, 108, 247, 0.3);
+    border-radius: 10px;
+    padding: 20px 32px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 500;
+    color: #fff;
+  }
+
+  .flow-arrow {
+    font-size: 24px;
+    color: #4a6cf7;
+    padding: 0 16px;
+    font-weight: 300;
+  }
+
+  /* Title slide special */
+  .title-slide {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  .title-slide h1 {
+    font-size: 64px;
+    margin-bottom: 16px;
+  }
+
+  .title-slide .subtitle {
+    font-size: 26px;
+  }
+
+  .title-slide .date {
+    font-size: 16px;
+    color: #555;
+    margin-top: 48px;
+    letter-spacing: 2px;
+  }
+
+  /* Comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 40px;
+    align-items: start;
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .compare-vs {
+    font-size: 20px;
+    color: #555;
+    font-weight: 600;
+    padding-top: 40px;
+  }
+
+  .compare-col h4 {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #666;
+    margin-bottom: 20px;
+    font-weight: 600;
+  }
+
+  .compare-col.new h4 {
+    color: #4a6cf7;
+  }
+
+  .compare-col ul li {
+    font-size: 19px;
+    padding: 8px 0 8px 28px;
+  }
+
+  .compare-col.old {
+    opacity: 0.5;
+  }
+
+  /* Big number */
+  .big-number {
+    font-size: 72px;
+    font-weight: 700;
+    color: #4a6cf7;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  /* Team */
+  .team-grid {
+    display: flex;
+    gap: 32px;
+    margin-top: 32px;
+  }
+
+  .team-member {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 36px 44px;
+    text-align: center;
+    flex: 1;
+  }
+
+  .team-member .avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(74, 108, 247, 0.15);
+    border: 2px solid rgba(74, 108, 247, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 24px;
+    color: #4a6cf7;
+    font-weight: 600;
+  }
+
+  .team-member h4 {
+    font-size: 20px;
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .team-member p {
+    font-size: 15px;
+    color: #777;
+  }
+
+  /* Key message callout */
+  .callout {
+    background: rgba(74, 108, 247, 0.08);
+    border-left: 3px solid #4a6cf7;
+    padding: 24px 32px;
+    margin-top: 32px;
+    border-radius: 0 8px 8px 0;
+    width: 100%;
+  }
+
+  .callout p {
+    font-size: 20px;
+    color: #c8c8c8;
+    font-style: italic;
+  }
+
+  /* Keyboard hints */
+  .keyboard-hint {
+    position: fixed;
+    bottom: 32px;
+    left: 40px;
+    font-size: 12px;
+    color: #444;
+    z-index: 100;
+    letter-spacing: 1px;
+  }
+
+  .keyboard-hint kbd {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- SLIDE 1: Title -->
+<div class="slide title-slide active" data-slide="1">
+  <div class="label">Acme Bank &middot; Marketing Tech POC</div>
+  <h1>Acme Emailer Studio</h1>
+  <p class="subtitle">AI-Generated Marketing Emails, Brand-Safe by Design</p>
+  <p class="date">April 2026</p>
+</div>
+
+<!-- SLIDE 2: Why We Built This -->
+<div class="slide" data-slide="2">
+  <div class="label">Context</div>
+  <h2>Why We Built This</h2>
+  <div class="divider"></div>
+  <ul>
+    <li>Marketers take <span class="accent">half a day</span> to draft a single campaign emailer by hand</li>
+    <li>Each business unit has its own identity &mdash; <span class="accent">brand drift is constant</span> when humans copy-paste templates</li>
+    <li>HTML email is unforgiving &mdash; <span class="accent">Outlook breaks what Gmail renders</span>, and we find out only after sending</li>
+    <li>Engineering on every campaign <span class="accent">doesn't scale</span> &mdash; we are the bottleneck</li>
+  </ul>
+  <div class="callout">
+    <p>"An emailer should take a marketer five minutes, not five hours &mdash; and it should never break in Outlook."</p>
+  </div>
+</div>
+
+<!-- SLIDE 3: Before / After -->
+<div class="slide" data-slide="3">
+  <div class="label">The Shift</div>
+  <h2>From Half a Day to Five Minutes</h2>
+  <div class="divider"></div>
+  <div class="compare">
+    <div class="compare-col old">
+      <h4>Manual workflow</h4>
+      <ul>
+        <li>Copy-paste from a stale template</li>
+        <li>Hand-pick brand colors &amp; fonts</li>
+        <li>Eyeball QA across mail clients</li>
+        <li>Engineer rescue for broken HTML</li>
+        <li>Days from brief to send</li>
+      </ul>
+    </div>
+    <div class="compare-vs">&rarr;</div>
+    <div class="compare-col new">
+      <h4>AI-Generated</h4>
+      <ul>
+        <li>Brief form in <span class="highlight">seconds</span></li>
+        <li>Brand kit applied <span class="highlight">automatically</span></li>
+        <li>Validated MJML &mdash; <span class="highlight">cross-client safe</span></li>
+        <li>Two-pane editor with <span class="highlight">live preview</span></li>
+        <li>Brief &rarr; export in <span class="highlight">65&ndash;105 seconds</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout">
+    <p>The AI does the draft. The marketer does the judgement. The system enforces the brand.</p>
+  </div>
+</div>
+
+<!-- SLIDE 4: AI Pipeline -->
+<div class="slide" data-slide="4">
+  <div class="label">How It Works</div>
+  <h2>From Brief to Email in One Flow</h2>
+  <div class="divider"></div>
+  <p style="margin-bottom: 16px;">Two models, one validator, zero broken emails.</p>
+  <div class="flow">
+    <div class="flow-item">Brief<br><small style="color:#888;font-weight:300">marketer input</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-item">Generate<br><small style="color:#888;font-weight:300">Claude Sonnet</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-item">Validate<br><small style="color:#888;font-weight:300">MJML strict</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-item">Edit<br><small style="color:#888;font-weight:300">two-pane canvas</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-item">Refine<br><small style="color:#888;font-weight:300">Claude Haiku chat</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-item">Export<br><small style="color:#888;font-weight:300">email-safe HTML</small></div>
+  </div>
+  <div class="callout">
+    <p>Sonnet writes the first draft. Haiku handles every tweak after that &mdash; <span class="highlight">~20&times; cheaper</span>, sub-second responses, and prompt caching means we pay full price only on the very first call of a session.</p>
+  </div>
+</div>
+
+<!-- SLIDE 5: Feature Cards -->
+<div class="slide" data-slide="5">
+  <div class="label">What's Shipped</div>
+  <h2>Capabilities for the Marketing Team</h2>
+  <div class="divider"></div>
+  <div class="grid-3">
+    <div class="card">
+      <h4>Brief-Driven Generation</h4>
+      <p>Category, audience, goal, body. Hit generate &mdash; the AI returns a full MJML email aligned with the chosen brand kit.</p>
+    </div>
+    <div class="card">
+      <h4>Two-Pane Editor</h4>
+      <p>Visual canvas on the left, live email preview on the right. Click any block to edit text directly &mdash; no HTML required.</p>
+    </div>
+    <div class="card">
+      <h4>AI Chat Refinement</h4>
+      <p>"Make the CTA red." "Shorten the subject." Plain English requests turn into validated MJML edits in seconds.</p>
+    </div>
+    <div class="card">
+      <h4>Version History</h4>
+      <p>Every save is a version. Auto-versioned every five minutes during active editing. Restore any point with one click.</p>
+    </div>
+    <div class="card">
+      <h4>Brand Kit Registry</h4>
+      <p>Acme Retail, Private Banking, Wealth &mdash; each with locked colors, fonts, tone, disclaimer. Admin UI for new BUs.</p>
+    </div>
+    <div class="card">
+      <h4>Stakeholder Preview Links</h4>
+      <p>Shareable URLs for review &mdash; reviewers see the rendered email and leave inline suggestions. No login required.</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 6: Architecture -->
+<div class="slide" data-slide="6">
+  <div class="label">Under the Hood</div>
+  <h2>Self-Hosted, Single-VM</h2>
+  <div class="divider"></div>
+  <div class="grid-2">
+    <div>
+      <ul>
+        <li><span class="accent">Frontend</span> &mdash; React SPA served as static files by nginx:alpine</li>
+        <li><span class="accent">Backend</span> &mdash; FastAPI (Python 3.12) with embedded MJML renderer</li>
+        <li><span class="accent">Database</span> &mdash; MySQL 8 on a private docker network, never exposed to the internet</li>
+        <li><span class="accent">AI</span> &mdash; Anthropic Claude (Sonnet for generation, Haiku for refinement) with prompt caching</li>
+        <li><span class="accent">Edge</span> &mdash; Nginx Proxy Manager on Digital Ocean handles TLS, tunnelling into the NAS over Wireguard</li>
+      </ul>
+    </div>
+    <div>
+      <div class="card" style="height:100%;display:flex;flex-direction:column;justify-content:center;">
+        <h4>Why It Matters</h4>
+        <p style="margin-top:8px;">Every email draft, asset, and brand kit lives on <span class="accent">infrastructure we control</span> &mdash; no third-party SaaS holding marketing data.</p>
+        <p style="margin-top:16px;">One <span class="accent">docker compose up</span> brings up the entire stack from source. No container registry, no CI dependency, full audit of what is running.</p>
+        <p style="margin-top:16px;">Database persists in a named volume; rebuilds never lose data.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 7: Brand Consistency -->
+<div class="slide" data-slide="7">
+  <div class="label">Brand Safety</div>
+  <h2>Brand Drift, Solved Structurally</h2>
+  <div class="divider"></div>
+  <p style="margin-bottom:8px;">Brand kits are not guidelines &mdash; they are inputs to every AI call.</p>
+
+  <ul style="margin-top:24px;">
+    <li>Each emailer <span class="accent">locks to a brand kit at creation</span> &mdash; no half-applied identity</li>
+    <li>The brand kit (colors, fonts, tone, disclaimer) is <span class="accent">injected into every prompt</span> &mdash; the model literally cannot generate off-brand</li>
+    <li>Admin-only CRUD for brand kits &mdash; <span class="accent">marketing onboards new business units without engineering</span></li>
+    <li>Logo and assets resolve through our backend &mdash; <span class="accent">no broken images</span> in delivered emails</li>
+  </ul>
+
+  <div class="callout" style="margin-top:36px;">
+    <p>If you can't tell which business unit sent it from the colors alone, the brand kit failed. We don't let that happen.</p>
+  </div>
+</div>
+
+<!-- SLIDE 8: Outcomes -->
+<div class="slide" data-slide="8">
+  <div class="label">What This Delivers</div>
+  <h2>Wins for Every Stakeholder</h2>
+  <div class="divider"></div>
+  <div class="grid-2">
+    <div>
+      <h3 style="font-size:18px;margin-bottom:20px;">For Marketers</h3>
+      <ul>
+        <li>Brief &rarr; exportable HTML in <span class="accent">65&ndash;105 seconds</span></li>
+        <li>Median <span class="accent">2 chat turns</span> to ship-ready (target was &le;5)</li>
+        <li><span class="accent">4 / 4</span> email-client compatibility &mdash; Gmail, Outlook, Apple Mail, mobile webmail</li>
+        <li><span class="accent">Shareable preview links</span> for stakeholder review &mdash; no logins, no exports</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="font-size:18px;margin-bottom:20px;">For the Organisation</h3>
+      <ul>
+        <li>Per-emailer cost tracked in <span class="accent">tokens and dollars</span> &mdash; "what did this campaign cost to draft?"</li>
+        <li><span class="accent">~80% prompt cache hit rate</span> after the first call &mdash; AI spend stays flat as usage grows</li>
+        <li><span class="accent">Self-hosted</span> &mdash; every draft, asset, and brand kit on our infrastructure</li>
+        <li>Admin observability dashboard &mdash; <span class="accent">every LLM call traced</span> with model, latency, tokens, status</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 9: Next Steps -->
+<div class="slide" data-slide="9">
+  <div class="label">Roadmap</div>
+  <h2>From POC to Production</h2>
+  <div class="divider"></div>
+  <ul>
+    <li><span class="accent">Live now:</span> Production stack deployed on the NAS, behind NPM with Let's Encrypt TLS on two subdomains</li>
+    <li><span class="accent">Pilot ready:</span> Three brand kits seeded (Retail, Private Banking, Wealth) plus admin UI for adding more</li>
+    <li><span class="accent">This week:</span> First click-through with a marketing user using a real brief &mdash; shadow the workflow, capture friction</li>
+    <li><span class="accent">Next 30 days:</span> Cost-dashboard review, refinement-quality A/B (Haiku vs Sonnet), SSO scoping</li>
+    <li><span class="accent">Mindset:</span> AI does the draft. Marketers do the judgement. Engineering does not gate every campaign.</li>
+  </ul>
+  <div style="margin-top:60px;text-align:center;width:100%;">
+    <h3 style="text-align:center;color:#666;font-size:16px;letter-spacing:4px;">QUESTIONS &amp; DISCUSSION</h3>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prevSlide()" id="prevBtn">&larr; PREV</button>
+  <button onclick="toggleFullscreen()" id="fsBtn" title="Fullscreen">&#x26F6;</button>
+  <button onclick="nextSlide()" id="nextBtn">NEXT &rarr;</button>
+</div>
+
+<div class="slide-counter" id="slideCounter"></div>
+
+<div class="keyboard-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate &nbsp; <kbd>F</kbd> fullscreen
+</div>
+
+<script>
+  let current = 1;
+  const total = document.querySelectorAll('.slide').length;
+
+  function showSlide(n) {
+    if (n < 1 || n > total) return;
+    document.querySelectorAll('.slide').forEach(s => {
+      s.classList.remove('active');
+    });
+    current = n;
+    document.querySelector(`[data-slide="${n}"]`).classList.add('active');
+    document.getElementById('slideCounter').textContent = `${current} / ${total}`;
+    document.getElementById('progressBar').style.width = `${(current / total) * 100}%`;
+    document.getElementById('prevBtn').style.opacity = current === 1 ? '0.3' : '1';
+    document.getElementById('nextBtn').style.opacity = current === total ? '0.3' : '1';
+  }
+
+  function nextSlide() { showSlide(current + 1); }
+  function prevSlide() { showSlide(current - 1); }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+    if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
+  });
+
+  showSlide(1);
+</script>
+
+</body>
+</html>

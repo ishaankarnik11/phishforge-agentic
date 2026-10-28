@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-12T00:00:00Z",
+  "title": "Design System: PhishForge",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Indigo",
+        "canonical": "oklch(54% 0.12 270)",
+        "dark": "oklch(62% 0.14 270)",
+        "tonalRamp": ["oklch(20% 0.06 270)", "oklch(28% 0.09 270)", "oklch(36% 0.11 270)", "oklch(43% 0.13 270)", "oklch(54% 0.12 270)", "oklch(66% 0.10 270)", "oklch(80% 0.07 270)", "oklch(95% 0.03 270)"]
+      },
+      "surface-base": {
+        "role": "neutral",
+        "displayName": "Indigo-Tinted Neutral",
+        "canonical": "oklch(98.5% 0.004 270)",
+        "dark": "oklch(20% 0.01 270)",
+        "tonalRamp": ["oklch(16% 0.01 270)", "oklch(25% 0.02 270)", "oklch(38% 0.015 270)", "oklch(55% 0.012 270)", "oklch(68% 0.01 270)", "oklch(88% 0.008 270)", "oklch(96.5% 0.005 270)", "oklch(99.6% 0.003 270)"]
+      },
+      "ink-strong": {
+        "role": "neutral",
+        "displayName": "Indigo Ink",
+        "canonical": "oklch(25% 0.02 270)",
+        "dark": "oklch(96% 0.01 270)",
+        "tonalRamp": ["oklch(16% 0.01 270)", "oklch(25% 0.02 270)", "oklch(38% 0.015 270)", "oklch(55% 0.012 270)", "oklch(68% 0.01 270)", "oklch(88% 0.008 270)", "oklch(96.5% 0.005 270)", "oklch(99.6% 0.003 270)"]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Verified Green",
+        "canonical": "oklch(58% 0.12 150)",
+        "dark": "oklch(66% 0.12 150)",
+        "tonalRamp": ["oklch(22% 0.05 150)", "oklch(30% 0.07 150)", "oklch(40% 0.09 150)", "oklch(50% 0.11 150)", "oklch(58% 0.12 150)", "oklch(70% 0.10 150)", "oklch(85% 0.06 150)", "oklch(95% 0.03 150)"]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Caution Amber",
+        "canonical": "oklch(70% 0.13 75)",
+        "dark": "oklch(76% 0.13 75)",
+        "tonalRamp": ["oklch(30% 0.05 75)", "oklch(40% 0.08 75)", "oklch(52% 0.11 75)", "oklch(62% 0.13 75)", "oklch(70% 0.13 75)", "oklch(80% 0.11 75)", "oklch(90% 0.07 75)", "oklch(95% 0.04 75)"]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Alert Red",
+        "canonical": "oklch(55% 0.16 25)",
+        "dark": "oklch(64% 0.16 25)",
+        "tonalRamp": ["oklch(25% 0.08 25)", "oklch(34% 0.11 25)", "oklch(44% 0.14 25)", "oklch(55% 0.16 25)", "oklch(64% 0.15 25)", "oklch(75% 0.12 25)", "oklch(88% 0.06 25)", "oklch(95% 0.03 25)"]
+      },
+      "info": {
+        "role": "semantic",
+        "displayName": "Context Blue",
+        "canonical": "oklch(60% 0.10 245)",
+        "dark": "oklch(68% 0.10 245)",
+        "tonalRamp": ["oklch(24% 0.05 245)", "oklch(33% 0.07 245)", "oklch(44% 0.09 245)", "oklch(54% 0.10 245)", "oklch(60% 0.10 245)", "oklch(72% 0.08 245)", "oklch(86% 0.05 245)", "oklch(95% 0.03 245)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles only. Rare." },
+      "body": { "displayName": "Body", "purpose": "Default body and UI text. Prose caps at 65 to 75ch." },
+      "label": { "displayName": "Label", "purpose": "Form labels, button text, nav items." },
+      "mono": { "displayName": "Mono", "purpose": "Literal machine values only: addresses, domains, code, MJML." }
+    },
+    "shadows": [
+      { "name": "raise", "value": "0 1px 2px oklch(25% 0.02 270 / 0.06), 0 1px 1px oklch(25% 0.02 270 / 0.04)", "purpose": "Gentle hover lift on interactive cards and rows. Absent at rest." },
+      { "name": "overlay", "value": "0 4px 12px -2px oklch(25% 0.02 270 / 0.10), 0 2px 4px -2px oklch(25% 0.02 270 / 0.06)", "purpose": "Dropdowns, popovers, comboboxes, tooltips." },
+      { "name": "dialog", "value": "0 16px 40px -8px oklch(25% 0.02 270 / 0.18), 0 4px 12px -4px oklch(25% 0.02 270 / 0.10)", "purpose": "Modals and sheets, paired with a scrim." }
+    ],
+    "motion": [
+      { "name": "duration-fast", "value": "120ms", "purpose": "Hover and focus feedback." },
+      { "name": "duration-base", "value": "180ms", "purpose": "Default state transitions." },
+      { "name": "duration-slow", "value": "240ms", "purpose": "Overlay and reveal." },
+      { "name": "ease-out", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Standard easing. No bounce, no elastic. Honor prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single high-emphasis action per context. Signal Indigo fill.",
+      "html": "<button class=\"ds-btn-primary\">Generate template</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; padding:0 14px; background:oklch(54% 0.12 270); color:oklch(99% 0.01 270); border:none; border-radius:6px; font:500 0.8125rem/1.2 Inter, system-ui, sans-serif; letter-spacing:0.01em; cursor:pointer; transition:background 180ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-primary:hover { background:oklch(48% 0.13 270); } .ds-btn-primary:active { background:oklch(43% 0.13 270); } .ds-btn-primary:focus-visible { outline:2px solid oklch(54% 0.12 270 / 0.4); outline-offset:2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default for most actions. Bordered, neutral fill.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; padding:0 14px; background:oklch(99.6% 0.003 270); color:oklch(38% 0.015 270); border:1px solid oklch(88% 0.008 270); border-radius:6px; font:500 0.8125rem/1.2 Inter, system-ui, sans-serif; letter-spacing:0.01em; cursor:pointer; transition:background 180ms cubic-bezier(0.22,1,0.36,1), border-color 180ms; } .ds-btn-secondary:hover { background:oklch(96.5% 0.005 270); border-color:oklch(80% 0.01 270); } .ds-btn-secondary:focus-visible { outline:2px solid oklch(54% 0.12 270 / 0.4); outline-offset:2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text field. Always carries a visible label above it.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"no-reply@microsoftsupport.com\" />",
+      "css": ".ds-input { box-sizing:border-box; width:100%; max-width:320px; height:36px; padding:0 12px; background:oklch(99.6% 0.003 270); color:oklch(38% 0.015 270); border:1px solid oklch(88% 0.008 270); border-radius:6px; font:400 0.9375rem/1.5 Inter, system-ui, sans-serif; transition:border-color 180ms, box-shadow 180ms; } .ds-input::placeholder { color:oklch(68% 0.01 270); } .ds-input:focus-visible { outline:none; border-color:oklch(54% 0.12 270); box-shadow:0 0 0 2px oklch(54% 0.12 270 / 0.35); }"
+    },
+    {
+      "name": "Status Badge (Success)",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Canonical state pattern: subtle tint, solid foreground, always a leading icon (color is never the only signal).",
+      "html": "<span class=\"ds-badge-success\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg>Valid MJML</span>",
+      "css": ".ds-badge-success { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:oklch(95% 0.03 150); color:oklch(40% 0.09 150); border-radius:9999px; font:600 0.6875rem/1.2 Inter, system-ui, sans-serif; letter-spacing:0.06em; text-transform:uppercase; }"
+    },
+    {
+      "name": "Active Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Side-nav item, active state. Conveyed by fill and ink weight plus an accent dot, never a left side stripe.",
+      "html": "<a class=\"ds-nav-active\"><span class=\"ds-nav-dot\"></span>Templates</a>",
+      "css": ".ds-nav-active { display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 12px; background:oklch(95% 0.03 270); color:oklch(25% 0.02 270); border-radius:6px; font:500 0.8125rem/1.2 Inter, system-ui, sans-serif; letter-spacing:0.01em; text-decoration:none; } .ds-nav-dot { width:6px; height:6px; border-radius:9999px; background:oklch(54% 0.12 270); }"
+    },
+    {
+      "name": "Authorization Context Bar",
+      "kind": "custom",
+      "refersTo": "authorization-context-bar",
+      "description": "Signature component. A persistent, low-emphasis strip in the app shell stating the authorized-simulation context. Info color only, never danger or warning.",
+      "html": "<div class=\"ds-authbar\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/><path d=\"m9 12 2 2 4-4\"/></svg><span>Authorized simulation</span><span class=\"ds-authbar-scope\">ClientCo / M365 engagement</span></div>",
+      "css": ".ds-authbar { display:inline-flex; align-items:center; gap:8px; padding:5px 12px; background:oklch(95% 0.03 245); color:oklch(44% 0.09 245); border-radius:6px; font:600 0.6875rem/1.2 Inter, system-ui, sans-serif; letter-spacing:0.06em; text-transform:uppercase; } .ds-authbar-scope { color:oklch(60% 0.10 245); font-weight:500; letter-spacing:0.02em; text-transform:none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Steady Instrument",
+    "overview": "PhishForge is a precision instrument for a sensitive job. The interface behaves like a well calibrated tool in a professional's hands: quiet, exact, and completely trustworthy. Surfaces are tinted near neutrals on a faint indigo axis, space is generous and rhythmic, and a single disciplined indigo accent does all the pointing. The lineage is Linear's structural precision and Stripe's documentation grade clarity, dialed calm. It explicitly rejects the costumes of its category: not hacker or dark web, not consumer marketing, not the reflex navy-and-gold enterprise-security template. Because PhishForge walks an ethical line, the design states which side it is on: the authorization context is a standing, first-class element of the app shell, not fine print.",
+    "keyCharacteristics": [
+      "Tinted neutrals on a faint indigo axis (hue 270), never pure black or white.",
+      "One restrained accent (Signal Indigo), reserved for action, selection, and state.",
+      "Fixed rem type scale, single sans family, with a mono for addresses and code.",
+      "Flat by default; depth is a response to state, not decoration.",
+      "Light and dark are the same roles remapped, not two separate designs.",
+      "Status is never carried by color alone."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Signal Indigo appears on at most ~10% of any screen. Its rarity is what makes it mean act here or this is selected. If two things on a screen compete for the accent, one is wrong.", "section": "colors" },
+      { "name": "The Tinted Neutral Rule", "body": "No #000, no #fff, ever. Every neutral carries hue 270 at chroma 0.003 to 0.02. Pure greys are forbidden; they read cold and break cohesion.", "section": "colors" },
+      { "name": "The Mono Means Machine Rule", "body": "JetBrains Mono is used only for literal machine values (email addresses, domains, code, MJML). Never for prose, labels, or decoration.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. A shadow appears only as a response to state (hover lift) or because the element overlays the page (menu, popover, modal).", "section": "elevation" },
+      { "name": "The Two Signal Rule", "body": "Status is conveyed by color plus an icon or label together, so meaning survives color-blind viewing. Color is never the only signal.", "section": "components" }
+    ],
+    "dos": [
+      "Do tint every neutral toward hue 270 at chroma 0.003 to 0.02. Use surface-* and ink-* tokens, never raw greys.",
+      "Do keep Signal Indigo to at most ~10% of any screen. Reserve it for action, selection, focus, and live state.",
+      "Do convey status with color plus an icon or label together, so meaning survives color-blind viewing.",
+      "Do keep surfaces flat at rest; add the Raise shadow only on hover and the Overlay/Dialog shadows only for floating elements.",
+      "Do use one button vocabulary everywhere. The same action looks identical on every screen.",
+      "Do give every interactive control a visible focus-visible ring and full keyboard operability (WCAG 2.1 AA).",
+      "Do keep the Authorization Context Bar present on every authenticated screen.",
+      "Do use Mono only for literal machine values (addresses, domains, code, MJML)."
+    ],
+    "donts": [
+      "Don't use any hacker or dark-web aesthetic: no neon on black, no terminal green, no skull or hood iconography.",
+      "Don't use consumer-marketing flashiness: no gradient heroes, no oversized emotive imagery, no mascots, no confetti, no growth-hacky urgency.",
+      "Don't fall back on the navy-and-gold enterprise-security cliche or stock shield-and-lock decoration.",
+      "Don't use a colored side stripe (border-left/border-right greater than 1px) on cards, list items, nav, or alerts.",
+      "Don't use gradient text, glassmorphism by default, the big-number hero-metric template, or endless identical icon-heading-text card grids.",
+      "Don't reach for a modal first. Exhaust inline and progressive disclosure before a dialog.",
+      "Don't use #000 or #fff, decorative motion that does not convey state, or display type in labels, buttons, or data.",
+      "Don't use em dashes in UI copy. Use commas, colons, periods, or parentheses."
+    ]
+  }
+}

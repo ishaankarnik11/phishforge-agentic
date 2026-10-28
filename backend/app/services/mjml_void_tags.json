@@ -1,0 +1,260 @@
+{
+  "mjmlVersion": "5.1.0",
+  "generatedBy": "backend/scripts/dump_mjml_void_tags.js",
+  "tags": [
+    {
+      "name": "mj-accordion",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-accordion-element",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-accordion-element",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-accordion-title",
+        "mj-accordion-text",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-accordion-text",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-accordion-title",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-attributes",
+      "endingTag": false,
+      "allowedChildren": [
+        {}
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-body",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-raw",
+        "mj-section",
+        "mj-wrapper",
+        "mj-hero"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-breakpoint",
+      "endingTag": true,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-button",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-carousel",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-carousel-image"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-carousel-image",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-column",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-accordion",
+        "mj-button",
+        "mj-carousel",
+        "mj-divider",
+        "mj-image",
+        "mj-raw",
+        "mj-social",
+        "mj-spacer",
+        "mj-table",
+        "mj-text",
+        "mj-navbar"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-divider",
+      "endingTag": false,
+      "allowedChildren": [],
+      "isVoid": true
+    },
+    {
+      "name": "mj-font",
+      "endingTag": false,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-group",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-column",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-head",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-attributes",
+        "mj-breakpoint",
+        "mj-html-attributes",
+        "mj-font",
+        "mj-preview",
+        "mj-style",
+        "mj-title",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-hero",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-accordion",
+        "mj-button",
+        "mj-carousel",
+        "mj-divider",
+        "mj-image",
+        "mj-social",
+        "mj-spacer",
+        "mj-table",
+        "mj-text",
+        "mj-navbar",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-html-attributes",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-selector"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-image",
+      "endingTag": false,
+      "allowedChildren": [],
+      "isVoid": true
+    },
+    {
+      "name": "mj-navbar",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-navbar-link",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-navbar-link",
+      "endingTag": true,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-preview",
+      "endingTag": true,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-raw",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-section",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-column",
+        "mj-group",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-social",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-social-element",
+        "mj-raw"
+      ],
+      "isVoid": false
+    },
+    {
+      "name": "mj-social-element",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-spacer",
+      "endingTag": false,
+      "allowedChildren": [],
+      "isVoid": true
+    },
+    {
+      "name": "mj-style",
+      "endingTag": true,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-table",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-text",
+      "endingTag": true,
+      "allowedChildren": [],
+      "isVoid": false
+    },
+    {
+      "name": "mj-title",
+      "endingTag": true,
+      "allowedChildren": null,
+      "isVoid": false
+    },
+    {
+      "name": "mj-wrapper",
+      "endingTag": false,
+      "allowedChildren": [
+        "mj-hero",
+        "mj-raw",
+        "mj-section"
+      ],
+      "isVoid": false
+    }
+  ]
+}

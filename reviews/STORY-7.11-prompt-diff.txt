@@ -1,0 +1,1170 @@
+commit 64b3824776720e6656c40fdab42cd2210d2fe3ae
+Author: Ishaan <author@example.com>
+Date:   Sat Apr 25 20:56:45 2026 +0530
+
+    STORY-7.11: tight LLM MJML contract + validator-driven retry
+    
+    AI pipeline (generator + refiner)
+    - Grammar contract block in system prompt: allowed tag list with
+      per-tag parent/children/void rules, sourced from MJML's component
+      registry via the existing mjml_void_tags.json snapshot. Hand-list
+      is only the tag NAMES we expose; rules are derived. Few-shot
+      WRONG/RIGHT pairs for the three production failure modes.
+    - Response pre-fill: generator "<mjml>\n<mj-head>\n", refiner
+      "<mjml>\n". client.complete() takes assistant_prefill, trims
+      trailing whitespace, prepends the trimmed text on response.
+      Graceful degradation: claude-sonnet-4-6 doesn't accept assistant
+      prefill — client logs once and retries without prefill. Cache
+      preserved (verified: 3177 read tokens on Sonnet, 2321 on Haiku
+      on second call).
+    - Validator-driven one-shot retry: after the LLM emits MJML, run
+      sanitize_and_validate (from STORY-7.10). On MJMLValidationError,
+      re-invoke the LLM once with the validator's structured error
+      message in a follow-up user turn. Cache stays warm (system
+      unchanged across attempts). Second failure raises
+      AIGenerationError; api/generate.py and api/chat.py catch and
+      return HTTP 422 in the same shape as STORY-7.10.
+    - Test seam MJML_LLM_FAILURE_INJECT (env): "once" / "always" /
+      unset. TEST-ONLY, documented in MJML_CONTRACT.md.
+    
+    Tests
+    - 17 new pipeline tests covering grammar contract, prefill,
+      retry path, failure-inject seam.
+    - 5-brief prompt corpus regression (AC-7) — all pass
+      sanitize_and_validate cleanly.
+    - Integration cache-hit tests for both stages
+      (@pytest.mark.integration, opt-in).
+    - Refiner mirror tests for retry / contract / cache.
+    - Existing pipeline tests rewritten for the new
+      AIGenerationError contract (was: graceful compiled_html=None).
+    
+    Frontend e2e (AC-9)
+    - ai-generation-retry-on-malformed-mjml.spec.ts: with
+      MJML_LLM_FAILURE_INJECT=once on the backend, drive the brief
+      -> generate flow, assert generation completes end-to-end with
+      zero error UI shown to the user (the retry happens server-
+      side, transparently). Skips cleanly with a clear reason
+      message when the env var isn't set.
+    - frontend/e2e/README.md: runbook for default vs
+      inject-mode flows.
+    
+    AC-1..AC-8 (AI) + AC-9 (frontend) satisfied. AC-10 next
+    (qa-reviewer with file + visual confirmation, including
+    cache_read_input_tokens evidence per CLAUDE.md).
+    
+    Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/backend/app/ai/pipeline.py b/backend/app/ai/pipeline.py
+index 63d9ee8..564936b 100644
+--- a/backend/app/ai/pipeline.py
++++ b/backend/app/ai/pipeline.py
+@@ -1,57 +1,174 @@
+ """Single-stage MVP pipeline: brief + brand kit -> MJML emailer.
+ 
+ STORY-3.1 — Sprint 2 MVP.  A single LLM call generates the complete MJML
+-from the creative brief and brand kit.  The multi-stage pipeline (planner,
+-writer, composer, validator, refiner) ships in Sprint 3.
++from the creative brief and brand kit.
+ 
+ STORY-3.4 — MJML enforcement.  Adds structural MJML validation before
+ compilation, retry logic on MJML failures, and integrates compilation into
+ the pipeline so the retry loop can feed compiler errors back to the model.
+ 
+-Usage
+------
+-::
++STORY-7.11 — Tight LLM contract + validator-driven retry.
+ 
+-    from app.ai.pipeline import generate_emailer
+-    from app.ai.schemas import GenerationInput
+-
+-    result = await generate_emailer(GenerationInput(...))
+-    print(result.mjml)
+-    print(result.compiled_html)  # None if compilation failed after retries
++* The system prompt now carries an explicit MJML grammar contract derived
++  from MJML's component registry (``app.ai.mjml_grammar``) plus three
++  failure → correction few-shot pairs.  Both blocks live in the cacheable
++  system block.
++* The assistant turn is **pre-filled** with ``<mjml>\\n<mj-head>\\n`` so
++  the LLM is structurally locked from token 0.
++* After the LLM emits MJML we run :func:`sanitize_and_validate`. On
++  :class:`MJMLValidationError` we issue **one** retry with the validator's
++  exact error appended as a follow-up user turn. The pre-fill is reapplied
++  on the retry. If the second attempt also fails we raise
++  :class:`AIGenerationError`, which the API layer surfaces as HTTP 422.
+ 
+ Design decisions
+ ----------------
+ - The system prompt is deterministic (no timestamps, no random values) so
+   Anthropic prompt caching hits on repeat calls with the same brand kit.
++  STORY-7.11 keeps this property: the grammar contract and few-shots are
++  static across calls; only the brand-kit-context placeholder varies.
+ - MJML is returned as raw text, not via structured output.  The model is
+   instructed to emit ``SUBJECT: ...`` / ``PREHEADER: ...`` lines before the
+   ``<mjml>`` block so we can extract all three from a single response.
+ - All LLM calls route through ``LlmClient`` from ``app.ai.client``.
+-- On MJML structural validation or compilation failure, the pipeline retries
+-  up to ``max_retries`` times by passing the error back to the model in a
+-  multi-turn conversation.  The system prompt stays the same for cache hits.
++
++Test seam: ``MJML_LLM_FAILURE_INJECT`` (env var) — STORY-7.11 AC-9.
++See :func:`_apply_failure_inject` and ``docs/MJML_CONTRACT.md``.
+ """
+ 
+ from __future__ import annotations
+ 
+ import logging
++import os
++from typing import Any
+ 
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from app.ai.brand_kit import get_by_id as get_brand_kit
+ from app.ai.brand_validator import validate_asset_placement, validate_brand_compliance
+ from app.ai.client import MODEL_SONNET, llm_client
++from app.ai.exceptions import AIGenerationError
+ from app.ai.helpers import parse_response
++from app.ai.mjml_grammar import get_grammar_block
+ from app.ai.mjml_validator import validate_mjml_structure
+ from app.ai.schemas import GenerationInput, GenerationResult, LlmCallLogEntry
+ from app.mjml.renderer import MjmlRendererError, compile_mjml
++from app.services.mjml_sanitize import (
++    MJMLValidationError,
++    SanitizeResult,
++    ValidationError,
++    sanitize_and_validate,
++)
+ from app.services.observability_service import log_llm_call
+ 
+ logger = logging.getLogger(__name__)
+ 
++# ---------------------------------------------------------------------------
++# Generator pre-fill (STORY-7.11 AC-3)
++# ---------------------------------------------------------------------------
++#
++# Pre-filling the assistant turn forces Claude to start its reply with
++# valid MJML structure rather than prose. We seed `<mjml>\n<mj-head>\n`
++# because every emailer we ship has both a head and a body. The output
++# parser is tolerant of either `SUBJECT:`-prefixed or pure-MJML responses,
++# so dropping the SUBJECT/PREHEADER labels here is safe — the LLM still
++# emits them in the output flow if the prompt asks for them.
++# Empirical note: Anthropic strips leading whitespace in the assistant
++# prefill but preserves newlines; the prefill below works as written.
++
++_GENERATOR_PREFILL = "<mjml>\n<mj-head>\n"
++
++
++# ---------------------------------------------------------------------------
++# Test seam: MJML_LLM_FAILURE_INJECT (STORY-7.11 AC-9)
++# ---------------------------------------------------------------------------
++#
++# When set to "once" the next LLM call returns a hardcoded malformed MJML
++# response (the v8 three-nested-mj-divider pattern) instead of hitting
++# Claude. Subsequent calls run normally. When set to "always" every call
++# returns malformed MJML. Unset / empty → production behaviour.
++#
++# This exists ONLY so the frontend Playwright spec for STORY-7.11 AC-9 can
++# drive the retry path deterministically. It MUST be unset in production.
++# Do not add a CLI / endpoint to flip this at runtime.
++
++_FAILURE_INJECT_ENV = "MJML_LLM_FAILURE_INJECT"
++
++# v8's exact malformed pattern (3 nested mj-divider wrappers).
++_INJECT_MALFORMED_MJML = """\
++SUBJECT: TEST INJECTED FAILURE
++PREHEADER: This response is forced by MJML_LLM_FAILURE_INJECT
++
++<mjml>
++<mj-head><mj-title>Inject</mj-title></mj-head>
++<mj-body>
++  <mj-divider>
++    <mj-divider>
++      <mj-divider>
++        <mj-section>
++          <mj-column>
++            <mj-text>Injected failure body</mj-text>
++          </mj-column>
++        </mj-section>
++      </mj-divider>
++    </mj-divider>
++  </mj-divider>
++</mj-body>
++</mjml>
++"""
++
++
++class _FailureInjector:
++    """Module-local state for the once-mode failure inject flag.
++
++    Encapsulated in a class so unit tests can monkeypatch / reset it
++    without touching env vars.
++    """
++
++    def __init__(self) -> None:
++        self._once_armed: bool = False
++        self._mode_seen: str | None = None
++
++    def _refresh(self) -> None:
++        mode = os.environ.get(_FAILURE_INJECT_ENV, "").strip().lower() or None
++        if mode != self._mode_seen:
++            self._mode_seen = mode
++            # Re-arm `once` whenever the env var transitions in.
++            self._once_armed = mode == "once"
++
++    def should_inject(self) -> bool:
++        """Return True if this call should return the malformed fixture."""
++        self._refresh()
++        if self._mode_seen == "always":
++            return True
++        if self._mode_seen == "once" and self._once_armed:
++            self._once_armed = False  # consume
++            return True
++        return False
++
++
++_failure_injector = _FailureInjector()
++
++
++def _maybe_inject_failure() -> str | None:
++    """Return the malformed MJML fixture if injection is armed, else None."""
++    if _failure_injector.should_inject():
++        logger.warning(
++            "%s active — returning malformed MJML fixture (TEST-ONLY seam)",
++            _FAILURE_INJECT_ENV,
++        )
++        return _INJECT_MALFORMED_MJML
++    return None
++
++
+ # ---------------------------------------------------------------------------
+ # System prompt — deterministic, brand-kit-parameterised
+ # ---------------------------------------------------------------------------
++#
++# The static grammar block and few-shot examples are loaded once at import
++# time (see ``app.ai.mjml_grammar``) and inlined as ``{grammar_block}``.
++# That string never varies across calls, so it caches with the rest of the
++# system prompt as soon as the brand kit is fixed.
+ 
+ _SYSTEM_PROMPT_TEMPLATE = """\
+ You are an expert email designer for Acme Bank. You produce production-ready \
+@@ -59,16 +176,7 @@ MJML markup that renders perfectly across all major email clients.
+ 
+ {brand_kit_context}
+ 
+-MJML REFERENCE (key tags):
+-- <mj-body>: root container
+-- <mj-section>: horizontal row (use background-color for backgrounds)
+-- <mj-column>: column inside a section (controls width)
+-- <mj-text>: text block (supports <h1>, <p>, <strong>, <a>)
+-- <mj-image>: responsive image (src, alt, width)
+-- <mj-button>: CTA button (href, background-color, color, font-size)
+-- <mj-divider>: horizontal rule
+-- <mj-attributes>: define default styles for child tags (place inside <mj-head>)
+-- <mj-head>: metadata section for attributes and styles
++{grammar_block}
+ 
+ RULES:
+ 1. COLOR ENFORCEMENT:
+@@ -97,15 +205,8 @@ from the brand kit above.
+    - The email MUST be responsive (percentage widths, mj-column).
+    - Output valid MJML starting with <mjml> and ending with </mjml>.
+    - Do NOT output raw HTML. Use MJML tags exclusively.
+-   - VOID TAGS (no children, must be self-closed with `/>`): \
+-<mj-image />, <mj-divider />, <mj-spacer />, <mj-button> (uses children \
+-for button text but never wrap other mj-* tags inside it). \
+-NEVER use <mj-divider> as a wrapper; \
+-NEVER nest <mj-text> inside <mj-divider>; \
+-to separate items vertically, place sibling \
+-<mj-text> blocks with self-closed <mj-divider /> between them, NOT \
+-nested. Example correct: <mj-text>...</mj-text><mj-divider /><mj-text>...</mj-text>. \
+-Example WRONG (do not emit): <mj-divider>...<mj-text>...</mj-text>...</mj-divider>.
++   - Follow the MJML GRAMMAR CONTRACT above. Void elements are listed there \
++and MUST be self-closed.
+ 7. ASSET USAGE:
+    - If the user provides an image labelled as a hero image (hero, banner, \
+ or header image), place it as a full-width <mj-image> with width="600px" \
+@@ -236,38 +337,15 @@ def _build_user_message(inp: GenerationInput) -> str:
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# MJML validation + compilation helper
++# Helpers
+ # ---------------------------------------------------------------------------
+ 
+ 
+-async def _validate_and_compile(
+-    mjml: str,
+-) -> tuple[str | None, list[str]]:
+-    """Validate MJML structure and compile to HTML.
+-
+-    Returns
+-    -------
+-    tuple[str | None, list[str]]
+-        ``(compiled_html, error_messages)``.  If ``error_messages`` is
+-        non-empty, ``compiled_html`` will be ``None``.
+-    """
+-    # Structural validation
+-    structural_issues = validate_mjml_structure(mjml)
+-    structural_errors = [i for i in structural_issues if i.startswith("ERROR:")]
+-    if structural_errors:
+-        return None, structural_errors
+-
+-    # Compile via npx mjml
+-    try:
+-        html = await compile_mjml(mjml)
+-        return html, []
+-    except MjmlRendererError as exc:
+-        return None, [f"MJML compilation error: {exc}"]
+-
+-
+-# ---------------------------------------------------------------------------
+-# Pipeline entry point
+-# ---------------------------------------------------------------------------
++def _format_validation_errors(errors: list[ValidationError]) -> str:
++    """Render a structured-error list for the retry user turn."""
++    return "; ".join(
++        f"line {e.line}: {e.message} (tag: {e.tag or '?'})" for e in errors
++    )
+ 
+ 
+ async def _persist_log_entry(
+@@ -290,6 +368,59 @@ async def _persist_log_entry(
+         logger.exception("Failed to persist LlmCallLog (non-fatal)")
+ 
+ 
++async def _call_llm_with_optional_inject(
++    *,
++    stage_name: str,
++    emailer_id: int,
++    system: str,
++    messages: list[dict[str, Any]],
++    assistant_prefill: str,
++) -> tuple[str, LlmCallLogEntry]:
++    """Wrap ``llm_client.complete`` with the failure-injection seam.
++
++    Returns the raw response text plus the call log entry. When the env
++    seam is armed we synthesise a log entry that mirrors the shape a real
++    response would have (zero tokens, success=True, model marked) so the
++    rest of the pipeline doesn't need to special-case this path.
++    """
++    injected = _maybe_inject_failure()
++    if injected is not None:
++        from datetime import datetime, timezone
++
++        log_entry = LlmCallLogEntry(
++            stage_name=stage_name,
++            emailer_id=emailer_id,
++            model=MODEL_SONNET,
++            input_tokens=0,
++            output_tokens=0,
++            cache_read_tokens=0,
++            cache_write_tokens=0,
++            latency_ms=0,
++            success=True,
++            error_message=None,
++            called_at=datetime.now(tz=timezone.utc),
++        )
++        return injected, log_entry
++
++    response_text, log_entry = await llm_client.complete(
++        stage_name=stage_name,
++        emailer_id=emailer_id,
++        model=MODEL_SONNET,
++        system=system,
++        messages=messages,
++        response_model=None,
++        max_tokens=8192,
++        assistant_prefill=assistant_prefill,
++    )
++    assert isinstance(response_text, str)
++    return response_text, log_entry
++
++
++# ---------------------------------------------------------------------------
++# Pipeline entry point
++# ---------------------------------------------------------------------------
++
++
+ async def generate_emailer(
+     inp: GenerationInput,
+     max_retries: int = 1,
+@@ -297,10 +428,10 @@ async def generate_emailer(
+ ) -> GenerationResult:
+     """Single-stage MVP: brief + brand kit -> MJML in one LLM call.
+ 
+-    Includes retry logic: if MJML structural validation or compilation fails,
+-    the pipeline retries by feeding the error back to the model as a multi-turn
+-    conversation.  The system prompt is unchanged across attempts so prompt
+-    caching still applies.
++    STORY-7.11: a validator-driven retry loop wraps the LLM call. On
++    :class:`MJMLValidationError` from :func:`sanitize_and_validate` we
++    re-prompt with the validator's structured error.  After ``max_retries``
++    we raise :class:`AIGenerationError` (the API layer maps it to HTTP 422).
+ 
+     Parameters
+     ----------
+@@ -308,19 +439,24 @@ async def generate_emailer(
+         Fully populated ``GenerationInput`` assembled by the API layer.
+     max_retries:
+         Maximum number of retries after the first attempt.  Defaults to 1
+-        (so at most 2 total LLM calls).
++        (so at most 2 total LLM calls, per AC-4).
++    db:
++        Optional ``AsyncSession``. When supplied, every LLM call's
++        ``LlmCallLogEntry`` is persisted for per-emailer cost tracking.
+ 
+     Returns
+     -------
+     GenerationResult
+-        Contains subject_line, preheader, full MJML source, compiled HTML
+-        (if successful), and usage metrics.
++        Contains subject_line, preheader, full MJML source, compiled HTML,
++        and accumulated usage metrics.
+ 
+     Raises
+     ------
+     ValueError
+-        If the brand kit ID is invalid or the LLM response cannot be parsed
+-        on all attempts.
++        If the brand kit ID is invalid or both attempts return responses
++        that lack a parseable ``<mjml>`` block.
++    AIGenerationError
++        If both attempts produce MJML that fails ``sanitize_and_validate``.
+     """
+     # 1. Load brand kit (raises ValueError if not found)
+     kit = get_brand_kit(inp.brand_kit_id)
+@@ -329,12 +465,13 @@ async def generate_emailer(
+     tone_csv = ", ".join(kit.tone_descriptors)
+     system = _SYSTEM_PROMPT_TEMPLATE.format(
+         brand_kit_context=kit.to_prompt_context(),
++        grammar_block=get_grammar_block(),
+         tone_descriptors=tone_csv,
+     )
+ 
+     # 3. Build user message
+     user_content = _build_user_message(inp)
+-    messages: list[dict[str, str]] = [{"role": "user", "content": user_content}]
++    messages: list[dict[str, Any]] = [{"role": "user", "content": user_content}]
+ 
+     # Track cumulative usage across retries
+     total_input_tokens = 0
+@@ -348,28 +485,24 @@ async def generate_emailer(
+     subject = ""
+     preheader = ""
+     mjml = ""
++    sanitize_result: SanitizeResult | None = None
++    last_validation_errors: list[ValidationError] = []
+ 
+     for attempt in range(1 + max_retries):
+         is_retry = attempt > 0
+ 
+-        # 4. Call LLM via the shared client
+-        response_text, log_entry = await llm_client.complete(
++        # 4. Call LLM via the shared client (with optional failure inject)
++        response_text, log_entry = await _call_llm_with_optional_inject(
+             stage_name="single_stage_mvp",
+             emailer_id=inp.emailer_id,
+-            model=MODEL_SONNET,
+             system=system,
+             messages=messages,
+-            response_model=None,
+-            max_tokens=8192,
++            assistant_prefill=_GENERATOR_PREFILL,
+         )
+ 
+-        # Persist log entry for per-emailer cost tracking (STORY-7.3).
+-        # Happens per attempt so retry cost is attributed correctly.
++        # Persist log entry per attempt so retry cost is attributed.
+         await _persist_log_entry(db, log_entry)
+ 
+-        # response_text is str when response_model=None
+-        assert isinstance(response_text, str)
+-
+         # Accumulate usage
+         total_input_tokens += log_entry.input_tokens
+         total_output_tokens += log_entry.output_tokens
+@@ -377,23 +510,22 @@ async def generate_emailer(
+         total_latency_ms += log_entry.latency_ms
+         model_used = log_entry.model
+ 
+-        # 5. Parse the response
++        # 5. Parse the response (subject + preheader + mjml block)
+         try:
+             subject, preheader, mjml = _parse_response(response_text)
+         except ValueError:
+             if attempt < max_retries:
+-                # Build retry conversation
++                # Rebuild the conversation: original user, the bad
++                # assistant turn, then a corrective user turn.
+                 messages.append({"role": "assistant", "content": response_text})
+                 messages.append(
+                     {
+                         "role": "user",
+                         "content": (
+-                            "The previous attempt produced invalid MJML. "
+-                            "Here are the errors:\n"
+-                            "ERROR: LLM response does not contain a valid "
+-                            "<mjml>...</mjml> block.\n\n"
+-                            "Please fix these issues and regenerate the "
+-                            "complete MJML."
++                            "Your previous output failed MJML validation: the "
++                            "response did not contain a parseable <mjml>...</mjml> "
++                            "block. Re-emit corrected MJML using the contract "
++                            "above."
+                         ),
+                     }
+                 )
+@@ -404,53 +536,88 @@ async def generate_emailer(
+                     inp.emailer_id,
+                 )
+                 continue
+-            # Final attempt failed — re-raise
+             raise
+ 
+-        # 6. Validate structure and compile
+-        compiled_html, compile_errors = await _validate_and_compile(mjml)
+-
+-        if compile_errors:
++        # 6. Run the save-time sanitizer (AC-4). On hard fail, re-prompt.
++        try:
++            sanitize_result = await sanitize_and_validate(mjml)
++        except MJMLValidationError as exc:
++            last_validation_errors = list(exc.errors)
+             if attempt < max_retries:
+-                # Build retry conversation with errors
+-                error_feedback = "\n".join(compile_errors)
++                error_msg = _format_validation_errors(exc.errors)
+                 messages.append({"role": "assistant", "content": response_text})
+                 messages.append(
+                     {
+                         "role": "user",
+                         "content": (
+-                            "The previous attempt produced invalid MJML. "
+-                            f"Here are the errors:\n{error_feedback}\n\n"
+-                            "Please fix these issues and regenerate the "
+-                            "complete MJML."
++                            f"Your previous output failed MJML validation: "
++                            f"{error_msg}.\n\n"
++                            f"Re-emit corrected MJML using the contract above. "
++                            f"Pay special attention to void tags (which must "
++                            f"self-close) and parent/child rules."
+                         ),
+                     }
+                 )
+                 logger.warning(
+-                    "Attempt %d/%d for emailer %d: MJML validation/compilation "
+-                    "failed (%s), retrying",
++                    "Attempt %d/%d for emailer %d: MJML validation failed (%d "
++                    "errors), retrying",
+                     attempt + 1,
+                     1 + max_retries,
+                     inp.emailer_id,
+-                    error_feedback,
++                    len(exc.errors),
+                 )
+                 continue
+ 
+-            # Max retries exhausted — return with warnings
+-            all_warnings.extend(compile_errors)
+-            all_warnings.append(
+-                "MJML compilation failed after all retry attempts. "
+-                "The MJML source is included but compiled HTML is unavailable."
+-            )
++            # Final attempt failed validation — propagate as AIGenerationError.
++            final_errors = _format_validation_errors(exc.errors) or "<none>"
+             logger.error(
+-                "All %d attempts failed for emailer %d: %s",
++                "All %d attempts failed validation for emailer %d: %s",
+                 1 + max_retries,
+                 inp.emailer_id,
+-                compile_errors,
++                final_errors,
+             )
+-            break
++            raise AIGenerationError(last_validation_errors) from exc
+ 
+-        # Success — no need to retry
++        # 7. Validation passed — compile the (possibly auto-repaired) MJML.
++        repaired_mjml = sanitize_result.repaired_mjml
++        try:
++            compiled_html = await compile_mjml(repaired_mjml)
++        except MjmlRendererError as exc:
++            # Sanitizer accepted it but compile still failed — surface as
++            # an MJML validation error so the API layer responds 422 with
++            # the same shape. This is the rare case where strict-validate
++            # passes but the renderer trips on something subtle.
++            synthetic_errors = [
++                ValidationError(line=0, tag="", message=f"compile failed: {exc}")
++            ]
++            last_validation_errors = synthetic_errors
++            if attempt < max_retries:
++                messages.append({"role": "assistant", "content": response_text})
++                messages.append(
++                    {
++                        "role": "user",
++                        "content": (
++                            f"Your previous output failed MJML compilation: "
++                            f"{exc}. Re-emit corrected MJML using the contract "
++                            f"above."
++                        ),
++                    }
++                )
++                logger.warning(
++                    "Attempt %d/%d for emailer %d: compile failed (%s), retrying",
++                    attempt + 1,
++                    1 + max_retries,
++                    inp.emailer_id,
++                    exc,
++                )
++                continue
++            raise AIGenerationError(synthetic_errors) from exc
++
++        # Persist the (possibly repaired) MJML so the rest of the pipeline
++        # works against a known-valid source.
++        mjml = repaired_mjml
++
++        # Success
+         if is_retry:
+             logger.info(
+                 "Retry succeeded on attempt %d/%d for emailer %d",
+@@ -460,7 +627,11 @@ async def generate_emailer(
+             )
+         break
+ 
+-    # 7. Validate brand compliance (soft check — warnings only)
++    # Surface the sanitizer's auto-repair warnings as pipeline warnings.
++    if sanitize_result is not None:
++        all_warnings.extend(sanitize_result.warnings)
++
++    # 8. Validate brand compliance (soft check — warnings only)
+     if mjml:
+         brand_check = validate_brand_compliance(mjml, kit)
+         if brand_check.warnings:
+@@ -471,7 +642,7 @@ async def generate_emailer(
+             )
+             all_warnings.extend(brand_check.warnings)
+ 
+-        # 8. Validate asset placement (soft check — warnings only)
++        # 9. Validate asset placement (soft check — warnings only)
+         asset_warnings = validate_asset_placement(mjml, inp.asset_urls)
+         if asset_warnings:
+             logger.warning(
+@@ -481,13 +652,13 @@ async def generate_emailer(
+             )
+             all_warnings.extend(asset_warnings)
+ 
+-    # Collect structural warnings (non-error) from last attempt
++    # Collect structural warnings (non-error) from the structural validator.
+     if mjml:
+         structural_issues = validate_mjml_structure(mjml)
+         structural_warnings = [i for i in structural_issues if i.startswith("WARNING:")]
+         all_warnings.extend(structural_warnings)
+ 
+-    # 9. Return structured result
++    # 10. Return structured result
+     return GenerationResult(
+         subject_line=subject,
+         preheader=preheader,
+diff --git a/backend/app/ai/refiner.py b/backend/app/ai/refiner.py
+index d606adb..a9574b5 100644
+--- a/backend/app/ai/refiner.py
++++ b/backend/app/ai/refiner.py
+@@ -6,6 +6,21 @@ with only the requested changes applied.
+ 
+ The refiner uses MODEL_HAIKU (per ARCHITECTURE.md section 6) because refinement
+ edits are typically small and latency matters for a chat-like experience.
++``REFINER_MODEL=sonnet`` flips to Sonnet for UAT (ADR-007).
++
++STORY-7.11 -- Tight LLM contract + validator-driven retry.  Mirrors the
++generator changes:
++
++* Refiner system prompt now carries the same MJML grammar contract +
++  failure→correction few-shots as the generator, derived from
++  ``app.ai.mjml_grammar``.
++* Assistant turn is pre-filled with ``<mjml>\\n`` so output is structurally
++  locked from token 0. The refiner pre-fill is shorter than the generator's
++  because refinement edits often reuse the existing ``<mj-head>`` block
++  verbatim, and forcing ``<mj-head>`` into the prefill would push the LLM
++  to re-emit head content even on body-only edits.
++* On :class:`MJMLValidationError` we retry **once** with the validator's
++  exact error.  After the second failure we raise :class:`AIGenerationError`.
+ 
+ Usage
+ -----
+@@ -22,39 +37,122 @@ Usage
+     ))
+     print(result.mjml)
+     print(result.summary)
+-
+-Design decisions
+-----------------
+-- The system prompt includes the full brand kit context (same as generation)
+-  so Anthropic prompt caching hits when the same brand kit is used across
+-  generation and refinement calls.
+-- The model is instructed to make ONLY the requested changes -- it must not
+-  rewrite sections the user did not mention.
+-- Uses MODEL_HAIKU for fast, low-cost edits.
+-- All LLM calls route through ``LlmClient`` from ``app.ai.client``.
+ """
+ 
+ from __future__ import annotations
+ 
+ import logging
++import os
++from datetime import datetime, timezone
++from typing import Any
+ 
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from app.ai.brand_kit import get_by_id as get_brand_kit
+ from app.ai.client import MODEL_HAIKU, MODEL_SONNET, llm_client
++from app.ai.exceptions import AIGenerationError
++from app.ai.helpers import parse_response
++from app.ai.mjml_grammar import get_grammar_block
++from app.ai.schemas import LlmCallLogEntry, RefineInput, RefineResult
+ from app.config import settings
++from app.mjml.renderer import MjmlRendererError, compile_mjml
++from app.services.mjml_sanitize import (
++    MJMLValidationError,
++    SanitizeResult,
++    ValidationError,
++    sanitize_and_validate,
++)
++from app.services.observability_service import log_llm_call
++
++logger = logging.getLogger(__name__)
+ 
+ 
+ def _refiner_model() -> str:
+     """Resolve refiner model from settings. Default Haiku (ADR-007);
+     set REFINER_MODEL=sonnet in .env to flip to Sonnet for UAT."""
+     return MODEL_SONNET if settings.REFINER_MODEL.lower() == "sonnet" else MODEL_HAIKU
+-from app.ai.helpers import parse_response
+-from app.ai.schemas import RefineInput, RefineResult
+-from app.mjml.renderer import MjmlRendererError, compile_mjml
+-from app.services.observability_service import log_llm_call
+ 
+-logger = logging.getLogger(__name__)
++
++# ---------------------------------------------------------------------------
++# Pre-fill (STORY-7.11 AC-3)
++# ---------------------------------------------------------------------------
++
++_REFINER_PREFILL = "<mjml>\n"
++
++
++# ---------------------------------------------------------------------------
++# Test seam: MJML_LLM_FAILURE_INJECT (STORY-7.11 AC-9)
++# ---------------------------------------------------------------------------
++#
++# Mirrors the seam in pipeline.py.  See module-level docstring there and
++# docs/MJML_CONTRACT.md for the full contract. Loud reminder: TEST-ONLY,
++# must be unset in production.
++
++_FAILURE_INJECT_ENV = "MJML_LLM_FAILURE_INJECT"
++
++_INJECT_MALFORMED_MJML = """\
++SUBJECT: TEST INJECTED FAILURE
++PREHEADER: This response is forced by MJML_LLM_FAILURE_INJECT
++
++<mjml>
++<mj-head><mj-title>Inject</mj-title></mj-head>
++<mj-body>
++  <mj-divider>
++    <mj-divider>
++      <mj-divider>
++        <mj-section>
++          <mj-column>
++            <mj-text>Injected refiner failure</mj-text>
++          </mj-column>
++        </mj-section>
++      </mj-divider>
++    </mj-divider>
++  </mj-divider>
++</mj-body>
++</mjml>
++"""
++
++
++class _FailureInjector:
++    """Module-local state for the once-mode failure inject flag.
++
++    The refiner has its own injector instance (separate from the
++    generator's) so a single MJML_LLM_FAILURE_INJECT=once setting will fire
++    on the next call to *each* stage rather than racing across stages.
++    """
++
++    def __init__(self) -> None:
++        self._once_armed: bool = False
++        self._mode_seen: str | None = None
++
++    def _refresh(self) -> None:
++        mode = os.environ.get(_FAILURE_INJECT_ENV, "").strip().lower() or None
++        if mode != self._mode_seen:
++            self._mode_seen = mode
++            self._once_armed = mode == "once"
++
++    def should_inject(self) -> bool:
++        self._refresh()
++        if self._mode_seen == "always":
++            return True
++        if self._mode_seen == "once" and self._once_armed:
++            self._once_armed = False
++            return True
++        return False
++
++
++_failure_injector = _FailureInjector()
++
++
++def _maybe_inject_failure() -> str | None:
++    if _failure_injector.should_inject():
++        logger.warning(
++            "%s active in refiner — returning malformed MJML fixture (TEST-ONLY)",
++            _FAILURE_INJECT_ENV,
++        )
++        return _INJECT_MALFORMED_MJML
++    return None
++
+ 
+ # ---------------------------------------------------------------------------
+ # System prompt template -- deterministic, brand-kit-parameterised
+@@ -67,6 +165,8 @@ and brand compliance.
+ 
+ {brand_kit_context}
+ 
++{grammar_block}
++
+ TASK:
+ You will be given existing MJML and a user instruction. Apply the requested \
+ changes to produce updated MJML.
+@@ -80,10 +180,8 @@ mention.
+ 5. Do NOT output raw HTML. Use MJML tags exclusively.
+ 6. The email MUST remain responsive (percentage widths, mj-column).
+ 7. Always preserve the <mj-attributes> block in <mj-head>.
+-8. Void tags (<mj-image>, <mj-divider>, <mj-spacer>) are self-closing \
+-with `/>`. NEVER wrap other mj-* tags inside them. To put a divider \
+-between two text blocks, emit sibling <mj-text>...</mj-text><mj-divider />\
+-<mj-text>...</mj-text>, NOT nested.
++8. Follow the MJML GRAMMAR CONTRACT above. Void tags MUST be self-closing; \
++parent/child rules are non-negotiable.
+ 
+ OUTPUT FORMAT:
+ First output the subject line and preheader on separate labelled lines, \
+@@ -99,6 +197,70 @@ PREHEADER: <the preheader text, max 100 chars>
+ Do NOT wrap the MJML in markdown code fences. Output it directly."""
+ 
+ 
++# ---------------------------------------------------------------------------
++# Helpers
++# ---------------------------------------------------------------------------
++
++
++def _format_validation_errors(errors: list[ValidationError]) -> str:
++    return "; ".join(
++        f"line {e.line}: {e.message} (tag: {e.tag or '?'})" for e in errors
++    )
++
++
++async def _persist_log_entry(
++    db: AsyncSession | None,
++    entry: LlmCallLogEntry,
++) -> None:
++    if db is None:
++        return
++    try:
++        await log_llm_call(db, entry, commit=False)
++    except Exception:
++        logger.exception("Failed to persist LlmCallLog (non-fatal)")
++
++
++async def _call_llm_with_optional_inject(
++    *,
++    stage_name: str,
++    emailer_id: int,
++    model: str,
++    system: str,
++    messages: list[dict[str, Any]],
++    assistant_prefill: str,
++) -> tuple[str, LlmCallLogEntry]:
++    """Wrap ``llm_client.complete`` with the failure-injection seam."""
++    injected = _maybe_inject_failure()
++    if injected is not None:
++        log_entry = LlmCallLogEntry(
++            stage_name=stage_name,
++            emailer_id=emailer_id,
++            model=model,
++            input_tokens=0,
++            output_tokens=0,
++            cache_read_tokens=0,
++            cache_write_tokens=0,
++            latency_ms=0,
++            success=True,
++            error_message=None,
++            called_at=datetime.now(tz=timezone.utc),
++        )
++        return injected, log_entry
++
++    response_text, log_entry = await llm_client.complete(
++        stage_name=stage_name,
++        emailer_id=emailer_id,
++        model=model,
++        system=system,
++        messages=messages,
++        response_model=None,
++        max_tokens=8192,
++        assistant_prefill=assistant_prefill,
++    )
++    assert isinstance(response_text, str)
++    return response_text, log_entry
++
++
+ # ---------------------------------------------------------------------------
+ # Refiner entry point
+ # ---------------------------------------------------------------------------
+@@ -107,30 +269,41 @@ Do NOT wrap the MJML in markdown code fences. Output it directly."""
+ async def refine_emailer(
+     inp: RefineInput,
+     db: AsyncSession | None = None,
++    max_retries: int = 1,
+ ) -> RefineResult:
+     """Apply a user's refinement instruction to existing MJML.
+ 
++    STORY-7.11: a validator-driven retry loop wraps the LLM call. The
++    semantics mirror the generator: on
++    :class:`app.services.mjml_sanitize.MJMLValidationError` we retry
++    once with the validator's exact error message; after the second
++    failure :class:`app.ai.exceptions.AIGenerationError` is raised.
++
+     Parameters
+     ----------
+     inp:
+         Fully populated ``RefineInput`` with current MJML, user instruction,
+         and optional chat history.
+     db:
+-        Optional ``AsyncSession``.  When supplied, the call's
+-        ``LlmCallLogEntry`` is persisted for per-emailer cost tracking
+-        (STORY-7.3).  Persistence failures are logged and swallowed so
+-        observability never breaks refinement.
++        Optional ``AsyncSession``.  When supplied, every LLM call's
++        ``LlmCallLogEntry`` is persisted for per-emailer cost tracking.
++    max_retries:
++        Maximum retries after the first attempt.  Defaults to 1.
+ 
+     Returns
+     -------
+     RefineResult
+         Contains the updated MJML, optional compiled HTML, a summary of
+-        changes, and usage metrics.
++        changes, and usage metrics from the **last** LLM call (mirrors
++        existing contract; per-attempt logs are persisted via ``db``).
+ 
+     Raises
+     ------
+     ValueError
+-        If the brand kit ID is invalid or the LLM response cannot be parsed.
++        If the brand kit ID is invalid or both attempts return responses
++        that lack a parseable ``<mjml>`` block.
++    AIGenerationError
++        If both attempts produce MJML that fails ``sanitize_and_validate``.
+     """
+     # 1. Load brand kit (raises ValueError if not found)
+     kit = get_brand_kit(inp.brand_kit_id)
+@@ -138,10 +311,11 @@ async def refine_emailer(
+     # 2. Build deterministic system prompt
+     system = _REFINER_SYSTEM_PROMPT.format(
+         brand_kit_context=kit.to_prompt_context(),
++        grammar_block=get_grammar_block(),
+     )
+ 
+     # 3. Build messages: current MJML, then chat history, then new instruction
+-    messages: list[dict[str, str]] = [
++    base_messages: list[dict[str, Any]] = [
+         {
+             "role": "user",
+             "content": (
+@@ -156,58 +330,124 @@ async def refine_emailer(
+             ),
+         },
+     ]
+-
+-    # Append chat history (prior conversation turns)
+     for msg in inp.chat_history:
+-        messages.append({"role": msg.role, "content": msg.content})
++        base_messages.append({"role": msg.role, "content": msg.content})
++    base_messages.append({"role": "user", "content": inp.instruction})
+ 
+-    # Append the new instruction
+-    messages.append({"role": "user", "content": inp.instruction})
+-
+-    # 4. Call LLM via the shared client
+     refiner_model = _refiner_model()
+-    response_text, log_entry = await llm_client.complete(
+-        stage_name="refiner",
+-        emailer_id=inp.emailer_id,
+-        model=refiner_model,
+-        system=system,
+-        messages=messages,
+-        response_model=None,
+-        max_tokens=8192,
+-    )
++    messages: list[dict[str, Any]] = list(base_messages)
++
++    last_log_entry: LlmCallLogEntry | None = None
++    sanitize_result: SanitizeResult | None = None
++    mjml = ""
++    last_validation_errors: list[ValidationError] = []
++
++    for attempt in range(1 + max_retries):
++        is_retry = attempt > 0
++
++        response_text, log_entry = await _call_llm_with_optional_inject(
++            stage_name="refiner",
++            emailer_id=inp.emailer_id,
++            model=refiner_model,
++            system=system,
++            messages=messages,
++            assistant_prefill=_REFINER_PREFILL,
++        )
++        last_log_entry = log_entry
+ 
+-    # Persist log entry for per-emailer cost tracking (STORY-7.3).
+-    if db is not None:
+-        try:
+-            # commit=False: the enclosing request handler owns the commit.
+-            await log_llm_call(db, log_entry, commit=False)
+-        except Exception:
+-            logger.exception("Failed to persist LlmCallLog (non-fatal)")
++        await _persist_log_entry(db, log_entry)
+ 
+-    # response_text is str when response_model=None
+-    assert isinstance(response_text, str)
+-
+-    # 5. Parse the response
+-    try:
+-        _subject, _preheader, mjml = parse_response(response_text)
+-    except ValueError:
+-        # Diagnostic: capture what the LLM actually returned so future
+-        # parse failures (often "<mjml> block missing" — model wrote prose,
+-        # truncated, or refused) are debuggable. Truncated to 1000 chars
+-        # to keep logs readable.
+-        logger.error(
+-            "Refiner parse failure on emailer %d (model=%s). "
+-            "Response head: %r",
+-            inp.emailer_id,
+-            refiner_model,
+-            response_text[:1000],
+-        )
+-        raise
++        # 4. Parse the response
++        try:
++            _subject, _preheader, mjml = parse_response(response_text)
++        except ValueError:
++            if attempt < max_retries:
++                messages.append({"role": "assistant", "content": response_text})
++                messages.append(
++                    {
++                        "role": "user",
++                        "content": (
++                            "Your previous output failed MJML validation: the "
++                            "response did not contain a parseable <mjml>...</mjml> "
++                            "block. Re-emit corrected MJML using the contract "
++                            "above."
++                        ),
++                    }
++                )
++                logger.warning(
++                    "Refiner attempt %d/%d for emailer %d: response parsing "
++                    "failed, retrying",
++                    attempt + 1,
++                    1 + max_retries,
++                    inp.emailer_id,
++                )
++                continue
++            # Diagnostic for the final-failure case (existing behaviour).
++            logger.error(
++                "Refiner parse failure on emailer %d (model=%s). "
++                "Response head: %r",
++                inp.emailer_id,
++                refiner_model,
++                response_text[:1000],
++            )
++            raise
++
++        # 5. Validate MJML; on hard fail, build retry conversation.
++        try:
++            sanitize_result = await sanitize_and_validate(mjml)
++        except MJMLValidationError as exc:
++            last_validation_errors = list(exc.errors)
++            if attempt < max_retries:
++                error_msg = _format_validation_errors(exc.errors)
++                messages.append({"role": "assistant", "content": response_text})
++                messages.append(
++                    {
++                        "role": "user",
++                        "content": (
++                            f"Your previous output failed MJML validation: "
++                            f"{error_msg}.\n\n"
++                            f"Re-emit corrected MJML using the contract above. "
++                            f"Pay special attention to void tags (which must "
++                            f"self-close) and parent/child rules."
++                        ),
++                    }
++                )
++                logger.warning(
++                    "Refiner attempt %d/%d for emailer %d: MJML validation "
++                    "failed (%d errors), retrying",
++                    attempt + 1,
++                    1 + max_retries,
++                    inp.emailer_id,
++                    len(exc.errors),
++                )
++                continue
++            logger.error(
++                "Refiner validation failed after %d attempts for emailer %d: %s",
++                1 + max_retries,
++                inp.emailer_id,
++                _format_validation_errors(exc.errors),
++            )
++            raise AIGenerationError(last_validation_errors) from exc
++
++        # Validation passed.
++        if is_retry:
++            logger.info(
++                "Refiner retry succeeded on attempt %d/%d for emailer %d",
++                attempt + 1,
++                1 + max_retries,
++                inp.emailer_id,
++            )
++        break
++
++    assert last_log_entry is not None  # always set on at least one attempt
++
++    # Use the (possibly auto-repaired) MJML downstream.
++    repaired_mjml = sanitize_result.repaired_mjml if sanitize_result else mjml
+ 
+     # 6. Try to compile MJML to HTML (best-effort, non-fatal)
+     compiled_html: str | None = None
+     try:
+-        compiled_html = await compile_mjml(mjml)
++        compiled_html = await compile_mjml(repaired_mjml)
+     except MjmlRendererError as exc:
+         logger.warning(
+             "MJML compilation failed for refiner on emailer %d: %s",
+@@ -220,11 +460,11 @@ async def refine_emailer(
+ 
+     # 8. Return structured result
+     return RefineResult(
+-        mjml=mjml,
++        mjml=repaired_mjml,
+         compiled_html=compiled_html,
+         summary=summary,
+-        model_used=log_entry.model,
+-        input_tokens=log_entry.input_tokens,
+-        output_tokens=log_entry.output_tokens,
+-        latency_ms=log_entry.latency_ms,
++        model_used=last_log_entry.model,
++        input_tokens=last_log_entry.input_tokens,
++        output_tokens=last_log_entry.output_tokens,
++        latency_ms=last_log_entry.latency_ms,
+     )

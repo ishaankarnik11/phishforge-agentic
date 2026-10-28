@@ -1,0 +1,34 @@
+# Line-ending policy.
+#
+# This repo is developed on Windows (core.autocrlf=true) but its shell
+# scripts and Dockerfiles run inside Linux containers, where a CRLF in a
+# shebang line breaks execution (`env: 'bash\r': No such file or directory`).
+# Force LF on everything that Linux/containers execute so a Windows checkout
+# can be tarred/rsynced straight to a Linux host without a dos2unix pass.
+
+# Sensible default: let Git decide text vs binary, store text as LF.
+* text=auto eol=lf
+
+# Files that MUST be LF (executed in Linux containers / CI).
+*.sh        text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile  text eol=lf
+*.Dockerfile text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Common binaries — never touch.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.svg  text
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary

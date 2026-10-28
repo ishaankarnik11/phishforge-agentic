@@ -1,0 +1,8 @@
+{
+  "name": "phishforge-backend-mjml",
+  "private": true,
+  "description": "MJML toolchain for the PhishForge backend renderer (npx mjml). Pinned exactly so the committed mjml_void_tags.json stays in sync.",
+  "dependencies": {
+    "mjml": "5.1.0"
+  }
+}

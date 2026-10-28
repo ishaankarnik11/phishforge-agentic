@@ -1,0 +1,32 @@
+# Build context hygiene for frontend image.
+# We build inside the image (npm/pnpm install + vite build) so the
+# context only needs the source and lockfile.
+
+# VCS / IDE
+.git
+.gitignore
+.DS_Store
+.vscode
+.idea
+
+# Dependency / build outputs that the image regenerates
+node_modules
+dist
+.vite
+.pnpm-store
+
+# Local env / secrets — never bake into the static bundle
+*.env
+*.env.*
+!*.env.example
+
+# Test artifacts
+coverage
+playwright-report
+test-results
+# Playwright specs are not part of the production bundle.
+e2e
+scripts
+
+# Random extras
+*.log

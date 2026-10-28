@@ -1,0 +1,135 @@
+# Production docker-compose for the Emailer application.
+#
+# Run from this folder:
+#     cp .env.example .env && nano .env
+#     docker compose up --build -d
+#
+# Services:
+#   - db        : MySQL 8.0, internal-only on the app network (no host port).
+#   - backend   : FastAPI application server (Python + Node for MJML rendering).
+#   - frontend  : nginx:alpine serving the static SPA bundle.
+
+services:
+
+  # --- Database ---------------------------------------------------------------
+  # No `ports:` -- the DB is reachable only by `backend` over the internal
+  # bridge network. This avoids exposing MySQL to the host.
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - app_mysql_data:/var/lib/mysql
+    networks: [app_net]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- Backend (FastAPI + Node + MJML) ----------------------------------------
+  # Runs Alembic migrations on startup, then starts uvicorn. The FastAPI
+  # lifespan seeds POC users and brand kits (both idempotent).
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/uploads
+    networks: [app_net]
+    environment:
+      # --- DB -----------------------------------------------------------------
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+
+      # --- Auth / API keys ----------------------------------------------------
+      SECRET_KEY: ${SECRET_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
+
+      # --- Public-facing URLs (baked into share links + exported HTML) --------
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+
+      # --- CORS -- comma-separated list, parsed by Settings -------------------
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+      # --- Refiner model override (haiku|sonnet) ------------------------------
+      REFINER_MODEL: ${REFINER_MODEL:-haiku}
+
+      # --- Optional observability ---------------------------------------------
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-acme-emailer-prod}
+
+      # --- Misc ---------------------------------------------------------------
+      TZ: ${TZ:-Asia/Kolkata}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- Frontend (static SPA via nginx:alpine) ---------------------------------
+  # The SPA is built with VITE_API_URL baked in at build time. The browser
+  # hits the backend directly via that absolute URL; CORS is enforced by
+  # ALLOWED_ORIGINS on the backend container.
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_BACKEND_URL}
+    restart: unless-stopped
+    ports:
+      - "8182:80"
+    networks: [app_net]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1/healthz | grep -q "^ok" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# --- Named volumes ------------------------------------------------------------
+volumes:
+  app_mysql_data:
+  app_uploads:
+
+# --- Internal network ---------------------------------------------------------
+networks:
+  app_net:
+    driver: bridge

@@ -1,0 +1,108 @@
+name: phishforge
+
+services:
+  db:
+    container_name: phishforge-db
+    image: mysql:8.0
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - phishforge_mysql_data:/var/lib/mysql
+    networks: [phishforge_net]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    container_name: phishforge-backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "${BACKEND_PORT:-8001}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - phishforge_uploads:/app/uploads
+    networks: [phishforge_net]
+    environment:
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+      SECRET_KEY: ${SECRET_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1-mini}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      REFINER_MODEL: ${REFINER_MODEL:-haiku}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-phishforge-prod}
+      TZ: ${TZ:-Asia/Kolkata}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    container_name: phishforge-frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_BACKEND_URL}
+    restart: unless-stopped
+    stop_grace_period: 5s
+    ports:
+      - "${FRONTEND_PORT:-8182}:80"
+    networks: [phishforge_net]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1/healthz | grep -q "^ok" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  phishforge_mysql_data:
+  phishforge_uploads:
+
+networks:
+  phishforge_net:
+    name: phishforge_net
+    driver: bridge

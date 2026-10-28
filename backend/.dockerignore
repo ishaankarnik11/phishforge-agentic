@@ -1,0 +1,44 @@
+# Build context hygiene for backend image.
+# Anything not needed inside the image should be listed here so the
+# COPY layers stay lean and no secrets leak into the build.
+
+# VCS / IDE
+.git
+.gitignore
+.DS_Store
+.vscode
+.idea
+
+# Python build / cache artifacts
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+coverage.json
+htmlcov
+dist
+build
+
+# Tests are not shipped in the runtime image
+tests
+scripts
+
+# Local secrets — never bake into images
+*.env
+*.env.*
+!*.env.example
+
+# Local upload data is volume-mounted at runtime, not baked in
+uploads
+
+# Random extras
+node_modules
+*.log
